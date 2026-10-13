@@ -5,7 +5,7 @@ import { heliocentric, orbitPoints, moonDirection, poleVector } from './orbits.j
 import { planetTexture, ringTexture, glowTexture } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './presenter.js';
-import { GLOSSARY, GLOSSARY_FORMS } from './glossary.js';
+import { GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION } from './glossary.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -440,6 +440,7 @@ function showPanel({ title, subtitle = '', color = null, text, facts = [], funFa
   $('panel-dot').style.display = color ? '' : 'none';
   $('panel-dot').style.background = color || '';
   dismissTerm();
+  hideAsk();
   const used = new Set();
   $('panel-text').replaceChildren(
     ...splitSentences(text).flatMap((s) => {
@@ -500,6 +501,7 @@ function setListening(on) {
 }
 
 $('btn-listen').addEventListener('click', () => {
+  hideAsk();
   if (listening) stopSpeaking();
   else speakCurrent();
 });
@@ -625,15 +627,39 @@ for (const term of GLOSSARY) {
 }
 
 // סוגר את כרטיס המושג וממשיך את מה שהיה לפניו (ההקראה או הסיור)
+// חוזרים מהמושג להסבר הכללי. אם נועם היה באמצע הסבר או סיור, הוא שואל אם להמשיך.
+let pendingResume = null;
 function closeTerm() {
   const st = termState;
   dismissTerm();
-  if (!st) return;
-  if (st.resume && voiceOn) speakCurrent(st.resume.onEnd, st.resume.index);
-  else if (st.tourWaiting && tour && tour.index < tourSteps.length - 1) {
-    tour.timer = setTimeout(() => goToStep(tour.index + 1), 1500);
-  }
+  if (!st || $('panel').hidden) return;
+  const canResume = st.resume || (st.tourWaiting && tour && tour.index < tourSteps.length - 1);
+  if (!canResume) return;
+  pendingResume = st;
+  $('ask-continue').hidden = false;
+  $('panel').scrollTop = 0;
+  presenter.play('open', 2);
+  if (voiceOn) narrator.speak(CONTINUE_QUESTION);
 }
+
+function hideAsk() {
+  $('ask-continue').hidden = true;
+  pendingResume = null;
+}
+
+$('ask-yes').addEventListener('click', () => {
+  const st = pendingResume;
+  hideAsk();
+  if (!st) return;
+  if (st.resume) speakCurrent(st.resume.onEnd, st.resume.index);
+  else if (tour && tour.index < tourSteps.length - 1) goToStep(tour.index + 1);
+});
+// "לא עכשיו": נועם עוצר. בסיור אפשר להמשיך בכפתור "הבא"
+$('ask-no').addEventListener('click', () => {
+  hideAsk();
+  narrator.stop();
+  presenter.play('wave', 1.5);
+});
 
 // סוגר את הכרטיס בלי להמשיך (למשל כשעוברים לכוכב לכת אחר)
 function dismissTerm() {

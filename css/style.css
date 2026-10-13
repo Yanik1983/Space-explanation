@@ -245,6 +245,19 @@ html, body {
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; }
 
+/* ---------- נועם שואל אם להמשיך ---------- */
+.ask {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 181, 46, 0.14);
+  border: 1px solid rgba(255, 181, 46, 0.5);
+  animation: pop 0.25s ease-out;
+}
+.ask[hidden] { display: none; }
+.ask p { margin: 0 0 10px; font-size: 17px; }
+.ask-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* ---------- מושגים ---------- */
 .term {
   font: inherit;

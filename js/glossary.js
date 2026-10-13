@@ -221,6 +221,9 @@ export const GLOSSARY = [
   },
 ];
 
+// השאלה שנועם שואל כשחוזרים מהסבר של מושג להסבר הכללי
+export const CONTINUE_QUESTION = 'רוצים שאמשיך להסביר?';
+
 // סדר החיפוש: הצורות הארוכות קודם, כדי ש"כוכב לכת" ייתפס לפני "כוכב"
 export const GLOSSARY_FORMS = GLOSSARY.flatMap((g) => g.forms.map((form) => ({ form, term: g })))
   .sort((a, b) => b.form.length - a.form.length);
