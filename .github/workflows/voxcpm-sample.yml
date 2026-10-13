@@ -1,0 +1,44 @@
+# ניסוי חד־פעמי: דוגמאות קול ילד מ־VoxCPM2. רץ רק ב־branch הניסוי, ושומר את הדוגמאות בו.
+name: VoxCPM sample
+
+on:
+  push:
+    branches: [ccr-6468bada-0q6qyg]
+    paths:
+      - tools/voxcpm_sample.py
+      - .github/workflows/voxcpm-sample.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Install VoxCPM (CPU)
+        run: |
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install voxcpm
+
+      - run: python3 tools/voxcpm_sample.py
+
+      - name: Commit samples
+        if: always()
+        run: |
+          git add samples/voxcpm || true
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add VoxCPM2 voice samples"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
