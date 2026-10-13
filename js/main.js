@@ -318,7 +318,8 @@ const TRAIL_DAYS = 1100; // אורך השביל: בערך שלוש שנים אח
 const TRAIL_POINTS = 420;
 const galaxyInfo = { data: GALAXY_MOTION, isGalaxy: true, moons: [], group: new THREE.Object3D() };
 let motionMix = 0, motionTarget = 0;
-let trails = [], dust = null, motionArrow = null;
+let trails = [], dust = null, streaks = null, motionArrow = null;
+let wind = 0; // כמה "רוח" עברה – מניע את הפסים והאבק שזורמים לאחור
 
 function initGalaxyMotion() {
   const line = (color) => {
@@ -347,7 +348,7 @@ function initGalaxyMotion() {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
   const up = new THREE.Vector3().crossVectors(side, GALAXY_DIR).normalize();
-  dust = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.6, color: '#b8c8ff', transparent: true, opacity: 0, depthWrite: false }));
+  dust = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.1, color: '#d6e0ff', transparent: true, opacity: 0, depthWrite: false }));
   dust.frustumCulled = false;
   dust.visible = false;
   dust.userData.seeds = Array.from({ length: N }, () => {
@@ -355,6 +356,31 @@ function initGalaxyMotion() {
     return { perp: side.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r), phase: Math.random() * 600 };
   });
   scene.add(dust);
+
+  // פסי אור שחולפים לאחור, כמו כוכבים שעפים ליד חלון של חללית
+  const S = 520;
+  const sgeo = new THREE.BufferGeometry();
+  sgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(S * 6), 3));
+  const scol = new Float32Array(S * 6);
+  for (let i = 0; i < S; i++) {
+    const k = 0.55 + Math.random() * 0.45;
+    scol.set([k * 0.75, k * 0.85, k, 0, 0, 0], i * 6); // ראש בהיר, זנב שדועך
+  }
+  sgeo.setAttribute('color', new THREE.BufferAttribute(scol, 3));
+  streaks = new THREE.LineSegments(sgeo, new THREE.LineBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  streaks.frustumCulled = false;
+  streaks.visible = false;
+  streaks.userData.seeds = Array.from({ length: S }, () => {
+    const a = Math.random() * Math.PI * 2, r = 12 + Math.random() ** 0.7 * 260;
+    return {
+      perp: side.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r),
+      phase: Math.random() * 700,
+      len: 6 + Math.random() * 14,
+    };
+  });
+  scene.add(streaks);
 
   // חץ שמראה לאן מערכת השמש טסה
   motionArrow = new THREE.ArrowHelper(GALAXY_DIR, GALAXY_DIR.clone().multiplyScalar(18), 40, 0x9db8ff, 9, 5);
@@ -375,7 +401,7 @@ function updateGalaxyMotion(dt) {
   }
   const on = motionMix > 0.001;
   for (const t of trails) t.line.visible = on;
-  dust.visible = motionArrow.visible = on;
+  dust.visible = streaks.visible = motionArrow.visible = on;
   if (!on) {
     galaxyInfo.label.style.display = 'none';
     return;
@@ -393,15 +419,27 @@ function updateGalaxyMotion(dt) {
     attr.needsUpdate = true;
     t.line.material.opacity = motionMix;
   }
-  const L = 600, flow = simDays * GALAXY_SPEED * 6;
+  // הרוח: מהירה יותר כשמאיצים את הזמן, ועוצרת כשהזמן עוצר
+  if (playing) wind += dt * (45 + Math.min(daysPerSecond, 60) * 1.5);
+  const L = 700;
   const pa = dust.geometry.attributes.position;
   dust.userData.seeds.forEach((sd, i) => {
-    const s = (((sd.phase + flow) % L) + L) % L;
+    const s = (((sd.phase + wind * 0.6) % L) + L) % L;
     motionTmp.copy(sd.perp).addScaledVector(GALAXY_DIR, L / 2 - s);
     pa.setXYZ(i, motionTmp.x, motionTmp.y, motionTmp.z);
   });
   pa.needsUpdate = true;
-  dust.material.opacity = motionMix * 0.7;
+  dust.material.opacity = motionMix * 0.85;
+  const sa = streaks.geometry.attributes.position;
+  streaks.userData.seeds.forEach((sd, i) => {
+    const s = (((sd.phase + wind) % L) + L) % L;
+    motionTmp.copy(sd.perp).addScaledVector(GALAXY_DIR, L / 2 - s);
+    sa.setXYZ(i * 2, motionTmp.x, motionTmp.y, motionTmp.z);
+    motionTmp.addScaledVector(GALAXY_DIR, sd.len);
+    sa.setXYZ(i * 2 + 1, motionTmp.x, motionTmp.y, motionTmp.z);
+  });
+  sa.needsUpdate = true;
+  streaks.material.opacity = motionMix;
   motionArrow.line.material.transparent = motionArrow.cone.material.transparent = true;
   motionArrow.line.material.opacity = motionArrow.cone.material.opacity = motionMix;
   // תווית ליד קצה החץ
