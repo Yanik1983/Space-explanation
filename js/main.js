@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO } from './data.js';
 import { planetTexture, ringTexture, glowTexture } from './textures.js';
 import { Narrator, splitSentences } from './speech.js';
+import { Presenter } from './presenter.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -310,6 +311,61 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 // ---------- חלון מידע והקראה ----------
 const narrator = new Narrator();
 let voiceOn = true;
+
+// ---------- נועם, הילד שמציג את ההסברים ----------
+const presenterEl = $('presenter');
+const presenter = new Presenter(presenterEl);
+presenter.setSize(presenterEl.clientWidth, presenterEl.clientHeight);
+narrator.onBoundary = () => presenter.pulse();
+let guideOn = true;
+let presenterPos = '';
+let lookSide = 0;
+
+// ממקם את נועם ליד מה שהוא מסביר: כרטיס הפתיחה, חלון ההסבר, או בפינה
+function placePresenter() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const pw = presenterEl.clientWidth, ph = presenterEl.clientHeight;
+  const phone = w <= 720;
+  let x, y;
+  lookSide = 0;
+  if (!$('intro').hidden) {
+    const r = document.querySelector('.intro-card').getBoundingClientRect();
+    if (!phone && r.left > pw - 20) {
+      x = r.left - pw + 20;
+      y = r.bottom - ph;
+      lookSide = 1;
+    } else {
+      x = r.right - pw + 4;
+      y = r.top - ph + 34;
+    }
+  } else if (!$('panel').hidden) {
+    const r = $('panel').getBoundingClientRect();
+    if (phone) {
+      x = w - pw - 4;
+      y = r.top - ph + 18;
+    } else {
+      x = r.right - 6;
+      y = Math.min(r.bottom, h - 84) - ph;
+      lookSide = -1;
+    }
+  } else if (phone) {
+    x = w - pw - 4;
+    y = document.querySelector('.timebar').getBoundingClientRect().top - ph + 14;
+  } else {
+    x = 12;
+    y = h - 84 - ph;
+  }
+  const pos = `translate(${Math.round(x)}px, ${Math.round(Math.max(0, y))}px)`;
+  if (pos !== presenterPos) presenterEl.style.transform = presenterPos = pos;
+}
+
+$('btn-guide').addEventListener('click', () => {
+  guideOn = !guideOn;
+  presenterEl.hidden = !guideOn;
+  $('btn-guide').setAttribute('aria-pressed', String(guideOn));
+  $('btn-guide').title = guideOn ? 'הסתרת נועם המדריך' : 'הצגת נועם המדריך';
+  $('btn-guide').style.opacity = guideOn ? '' : '0.5';
+});
 let selected = null;
 
 function showPanel({ title, subtitle = '', color = null, text, facts = [], funFact = '' }) {
@@ -396,6 +452,7 @@ function markActive(body) {
 function showBody(body) {
   const d = body.data;
   markActive(body);
+  presenter.play('point', 2.4);
   flyTo(body);
   showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
 }
@@ -449,6 +506,7 @@ function goToStep(i) {
   } else {
     markActive(null);
     flyTo(null);
+    presenter.play(step.intro === TOUR_OUTRO ? 'wave' : 'open', 2.6);
     showPanel({ title: step.intro.title, text: step.intro.narration });
   }
   const advance = () => {
@@ -527,6 +585,14 @@ function frame() {
   renderer.render(scene, camera);
   updateLabels();
 
+  if (guideOn) {
+    if (!$('intro').hidden && presenter.time > 0.5 && !presenter.gestureTime && Math.random() < dt / 5) {
+      presenter.play('wave', 2.5);
+    }
+    placePresenter();
+    presenter.update(dt, narrator.speaking, lookSide);
+  }
+
   const dateText = dateFmt.format(new Date(J2000 + simDays * DAY_MS));
   if (dateText !== lastDateText) {
     $('date-label').textContent = dateText;
@@ -540,7 +606,9 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  presenter.setSize(presenterEl.clientWidth, presenterEl.clientHeight);
 });
+presenter.play('wave', 3);
 
 // גישה נוחה לבדיקות מהקונסול
-window.solar = { bodies: bodyById, narrator };
+window.solar = { bodies: bodyById, narrator, presenter };

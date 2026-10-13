@@ -257,7 +257,6 @@ html, body {
   border-radius: 24px;
   backdrop-filter: blur(12px);
 }
-.intro-emoji { font-size: 54px; }
 .intro h2 { margin: 6px 0 10px; font-size: 30px; }
 .intro p { color: var(--muted); font-size: 17px; line-height: 1.6; margin: 0 0 18px; }
 .intro-actions { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
@@ -271,6 +270,21 @@ html, body {
   color: var(--text) !important;
 }
 .hint { font-size: 14px !important; margin: 16px 0 0 !important; }
+
+/* ---------- נועם המדריך ---------- */
+.presenter {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 240px;
+  height: 300px;
+  pointer-events: none;
+  z-index: 11;
+  transition: transform 0.7s cubic-bezier(0.3, 1.25, 0.5, 1);
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.5));
+}
+.presenter[hidden] { display: none; }
+.presenter canvas { display: block; }
 
 /* ---------- טלפון ---------- */
 @media (max-width: 720px) {
@@ -301,4 +315,5 @@ html, body {
   body.panel-open .timebar { display: none; }
   .chooser { justify-content: flex-start; }
   .chip { min-width: 58px; font-size: 12px; }
+  .presenter { width: 130px; height: 165px; }
 }

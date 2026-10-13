@@ -14,6 +14,8 @@ export class Narrator {
     this.token = 0;
     this.timer = null;
     this.onVoiceChange = null;
+    this.onBoundary = null;
+    this.speaking = false; // האם ממש נשמע קול ברגע זה (בשביל תנועת הפה של הדמות)
     if (this.supported) {
       this.pickVoice();
       speechSynthesis.addEventListener?.('voiceschanged', () => this.pickVoice());
@@ -61,11 +63,20 @@ export class Narrator {
       u.lang = this.voice.lang || 'he-IL';
       u.voice = this.voice;
       u.rate = this.rate;
-      u.pitch = 1.05;
+      u.pitch = 1.2; // קצת יותר גבוה, שיישמע צעיר יותר
       const index = i++;
-      u.onstart = () => token === this.token && onSentence?.(index);
-      u.onend = () => next();
+      u.onstart = () => {
+        if (token !== this.token) return;
+        this.speaking = true;
+        onSentence?.(index);
+      };
+      u.onboundary = () => token === this.token && this.onBoundary?.();
+      u.onend = () => {
+        this.speaking = false;
+        next();
+      };
       u.onerror = (e) => {
+        this.speaking = false;
         if (e.error !== 'interrupted' && e.error !== 'canceled') next();
       };
       speechSynthesis.speak(u);
@@ -75,6 +86,7 @@ export class Narrator {
 
   stop() {
     this.token++;
+    this.speaking = false;
     clearTimeout(this.timer);
     if (this.supported) speechSynthesis.cancel();
   }
