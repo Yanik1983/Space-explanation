@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT } from './data.js';
 import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition } from './orbits.js';
-import { planetTexture, ringTexture, glowTexture } from './textures.js';
+import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './presenter.js';
 import { GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION } from './glossary.js';
@@ -14,6 +14,12 @@ const J2000 = Date.UTC(2000, 0, 1, 12);
 const DAY_MS = 86400000;
 const MAX_SPIN = 5; // מהירות סיבוב עצמי מקסימלית בתצוגה (רדיאנים לשנייה), כדי שלא "יהבהב"
 const UP = new THREE.Vector3(0, 1, 0);
+
+// מיקום השמש במערכת של המצלמה – משמש להאיר רק את הצד הנכון (אורות ערים בלילה, אטמוספירה ביום)
+const sunView = { value: new THREE.Vector3() };
+const LOGDEPTH_V = ['#include <common>\n#include <logdepthbuf_pars_vertex>', '#include <logdepthbuf_vertex>'];
+const LOGDEPTH_F = ['#include <common>\n#include <logdepthbuf_pars_fragment>', '#include <logdepthbuf_fragment>'];
+const moonImage = imageTexture('textures/moon_1024.jpg');
 
 let simDays = (Date.now() - J2000) / DAY_MS; // ימים מאז 1.1.2000 בצהריים
 
@@ -59,10 +65,27 @@ addStars();
 
 // ---------- גופים ----------
 const bodies = [];
-let moonTexture = null; // טקסטורה משותפת לירחים
 const sun = createBody(SUN, true);
 for (const p of PLANETS) createBody(p, false);
 const bodyById = Object.fromEntries(bodies.map((b) => [b.data.id, b]));
+
+// טקסטורות מפורטות נוצרות ברקע ומחליפות את הגרסה הקטנה, כוכב אחרי כוכב
+loadDetailed(['sun', 'jupiter', 'saturn', 'mars', 'venus', 'neptune', 'mercury', 'uranus', 'pluto'], (id, map, bump) => {
+  const mat = bodyById[id]?.mesh.material;
+  if (!mat) return;
+  if (mat.uniforms) {
+    mat.uniforms.map.value.dispose();
+    mat.uniforms.map.value = map;
+    return;
+  }
+  mat.map?.dispose();
+  mat.map = map;
+  if (bump) {
+    mat.bumpMap = bump;
+    mat.bumpScale = 3;
+  }
+  mat.needsUpdate = true;
+});
 
 // ---------- חגורת האסטרואידים ----------
 // "גוף" מיוחד: אין לו כדור, רק נקודה במרכז החגורה שהמצלמה טסה אליה
@@ -78,7 +101,18 @@ const asteroidPoints = (() => {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.32, vertexColors: true, sizeAttenuation: true }));
+  // נקודה עגולה ורכה במקום ריבוע
+  const dot = document.createElement('canvas');
+  dot.width = dot.height = 32;
+  const g = dot.getContext('2d').createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.8)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  dot.getContext('2d').fillStyle = g;
+  dot.getContext('2d').fillRect(0, 0, 32, 32);
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 0.22, vertexColors: true, sizeAttenuation: true, map: new THREE.CanvasTexture(dot), transparent: true, depthWrite: false,
+  }));
   pts.frustumCulled = false;
   scene.add(pts);
   return pts;
@@ -92,9 +126,92 @@ function updateAsteroids() {
     attr.setXYZ(i, v.x, v.y, v.z);
   }
   attr.needsUpdate = true;
-  asteroidPoints.material.size = 0.32 * (1 + scaleMix * 1.5);
+  asteroidPoints.material.size = 0.22 * (1 + scaleMix * 1.5);
   toDisplay(belt.au, belt.group.position);
 }
+
+// ---------- חומרים מיוחדים ----------
+
+// השמש: הקצוות כהים יותר מהמרכז, כמו במציאות (limb darkening)
+function sunMaterial(map) {
+  return new THREE.ShaderMaterial({
+    uniforms: { map: { value: map } },
+    vertexShader: `${LOGDEPTH_V[0]}
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() {
+        vUv = uv;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = -mv.xyz;
+        gl_Position = projectionMatrix * mv;
+        ${LOGDEPTH_V[1]}
+      }`,
+    fragmentShader: `${LOGDEPTH_F[0]}
+      uniform sampler2D map; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() {
+        ${LOGDEPTH_F[1]}
+        float mu = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
+        vec3 c = texture2D(map, vUv).rgb * (0.45 + 0.65 * pow(mu, 0.5));
+        gl_FragColor = vec4(c, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+}
+
+// הילה דקה של אטמוספירה בשולי כוכב הלכת, רק בצד המואר
+function atmosphere(radius, color, strength) {
+  return new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 64, 32),
+    new THREE.ShaderMaterial({
+      uniforms: { color: { value: new THREE.Color(color) }, strength: { value: strength }, uSunView: sunView },
+      vertexShader: `${LOGDEPTH_V[0]}
+        varying vec3 vN; varying vec3 vP;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vN = normalize(normalMatrix * normal);
+          vP = mv.xyz;
+          gl_Position = projectionMatrix * mv;
+          ${LOGDEPTH_V[1]}
+        }`,
+      fragmentShader: `${LOGDEPTH_F[0]}
+        uniform vec3 color; uniform float strength; uniform vec3 uSunView; varying vec3 vN; varying vec3 vP;
+        void main() {
+          ${LOGDEPTH_F[1]}
+          float rim = pow(1.0 - max(dot(normalize(vN), normalize(-vP)), 0.0), 2.2);
+          float lit = smoothstep(-0.35, 0.5, dot(normalize(vN), normalize(uSunView - vP)));
+          gl_FragColor = vec4(color * rim * lit * strength, 1.0);
+        }`,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+    }),
+  );
+}
+
+// כדור הארץ: צילומי לוויין, אוקיינוסים מבריקים, הרים בתבליט, ואורות ערים רק בצד של הלילה
+function earthMaterial() {
+  const mat = new THREE.MeshPhongMaterial({
+    map: imageTexture('textures/earth_atmos_2048.jpg'),
+    specularMap: imageTexture('textures/earth_specular_2048.jpg', false),
+    specular: new THREE.Color(0x3a3a3a),
+    shininess: 18,
+    normalMap: imageTexture('textures/earth_normal_2048.jpg', false),
+    normalScale: new THREE.Vector2(0.8, 0.8),
+    emissiveMap: imageTexture('textures/earth_lights_2048.jpg'),
+    emissive: new THREE.Color(0xffd29a),
+    emissiveIntensity: 1.3,
+  });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uSunView = sunView;
+    sh.fragmentShader = 'uniform vec3 uSunView;\n' + sh.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      totalEmissiveRadiance *= smoothstep(0.12, -0.22, dot(normal, normalize(uSunView + vViewPosition)));`,
+    );
+  };
+  return mat;
+}
+
 
 function createBody(data, isSun) {
   const group = new THREE.Group();
@@ -104,15 +221,27 @@ function createBody(data, isSun) {
   group.add(tilt);
   scene.add(group);
 
-  const geo = new THREE.SphereGeometry(data.size, 64, 32);
-  const map = planetTexture(data.id);
+  const geo = new THREE.SphereGeometry(data.size, 96, 48);
   const mat = isSun
-    ? new THREE.MeshBasicMaterial({ map })
-    : new THREE.MeshStandardMaterial({ map, roughness: 0.9, metalness: 0 });
+    ? sunMaterial(planetTexture(data.id))
+    : data.id === 'earth'
+      ? earthMaterial()
+      : new THREE.MeshStandardMaterial({ map: planetTexture(data.id), roughness: 0.9, metalness: 0 });
   const mesh = new THREE.Mesh(geo, mat);
   tilt.add(mesh);
 
-  const body = { data, group, tilt, mesh, spin: 0, isSun, au: new THREE.Vector3() };
+  let clouds = null;
+  if (data.id === 'earth') {
+    clouds = new THREE.Mesh(
+      new THREE.SphereGeometry(data.size * 1.012, 96, 48),
+      new THREE.MeshPhongMaterial({ map: imageTexture('textures/earth_clouds_1024.png'), transparent: true, depthWrite: false, shininess: 2 }),
+    );
+    tilt.add(clouds);
+    group.add(atmosphere(data.size * 1.04, '#5aa8ff', 1.4));
+  }
+  if (data.id === 'venus') group.add(atmosphere(data.size * 1.035, '#ffdca8', 0.9));
+
+  const body = { data, group, tilt, mesh, spin: 0, isSun, au: new THREE.Vector3(), clouds };
   mesh.userData.body = body;
 
   if (isSun) {
@@ -144,7 +273,7 @@ function createBody(data, isSun) {
   if (data.moon) {
     body.moon = new THREE.Mesh(
       new THREE.SphereGeometry(data.moon.size, 32, 16),
-      new THREE.MeshStandardMaterial({ map: planetTexture('moon'), roughness: 1 }),
+      new THREE.MeshStandardMaterial({ map: moonImage, roughness: 1 }),
     );
     group.add(body.moon);
   }
@@ -155,10 +284,9 @@ function createBody(data, isSun) {
     if (m.render !== false) {
       pivot = new THREE.Group();
       tilt.add(pivot);
-      moonTexture ||= planetTexture('moon');
       mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(m.size, 24, 16),
-        new THREE.MeshStandardMaterial({ map: moonTexture, color: m.color, roughness: 1 }),
+        new THREE.SphereGeometry(m.size, 32, 16),
+        new THREE.MeshStandardMaterial({ map: moonImage, color: m.color, roughness: 1 }),
       );
       mesh.position.x = data.size * m.dist;
       pivot.add(mesh);
@@ -311,6 +439,7 @@ function updateBodies(dt) {
       b.spin += Math.sign(omega) * Math.min(Math.abs(omega), MAX_SPIN) * dt;
     }
     b.mesh.rotation.y = b.spin;
+    if (b.clouds) b.clouds.rotation.y = b.spin * 1.02 + simDays * 0.01;
     if (b.moon) {
       // הירח במיקום האמיתי שלו סביב כדור הארץ (המרחק מוגדל), ותמיד אותו צד פונה אלינו
       moonDirection(simDays, b.moon.position).multiplyScalar(d.moon.distance);
@@ -1057,6 +1186,8 @@ function frame() {
   updateCamera(dt);
   controls.update();
   updateViewOffset(dt);
+  camera.updateMatrixWorld();
+  sunView.value.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse);
   renderer.render(scene, camera);
   updateLabels();
 
