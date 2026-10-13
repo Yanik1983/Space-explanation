@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO } from './data.js';
+import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED } from './data.js';
+import { heliocentric, orbitPoints, moonDirection, poleVector } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture } from './textures.js';
 import { Narrator, splitSentences } from './speech.js';
 import { Presenter } from './presenter.js';
@@ -10,20 +11,43 @@ const DEG = Math.PI / 180;
 const J2000 = Date.UTC(2000, 0, 1, 12);
 const DAY_MS = 86400000;
 const MAX_SPIN = 5; // מהירות סיבוב עצמי מקסימלית בתצוגה (רדיאנים לשנייה), כדי שלא "יהבהב"
+const UP = new THREE.Vector3(0, 1, 0);
+
+let simDays = (Date.now() - J2000) / DAY_MS; // ימים מאז 1.1.2000 בצהריים
+
+// ---------- קנה מידה ----------
+// מוקטן: הכיוונים אמיתיים, והמרחק מהשמש "נדחס" (שורש ריבועי) כדי שכל כוכבי הלכת ייכנסו במסך.
+// אמיתי: המרחקים פרופורציונליים למציאות (50 יחידות = יחידה אסטרונומית אחת). הגדלים מוגדלים בשני המצבים.
+const COMPRESSED = { r0: 7.5, k: 22 };
+const REAL_AU = 50;
+const REAL_SIZE = { sun: 0.45, planet: 0.55 };
+let scaleT = 0; // 0 = מוקטן, 1 = אמיתי (עובר בהדרגה)
+let scaleTarget = 0;
+let scaleMix = 0;
+
+function displayRadius(au) {
+  const compressed = COMPRESSED.r0 + COMPRESSED.k * Math.sqrt(au);
+  return compressed + (REAL_AU * au - compressed) * scaleMix;
+}
+
+function toDisplay(v, out) {
+  const r = v.length();
+  return r ? out.copy(v).multiplyScalar(displayRadius(r) / r) : out.set(0, 0, 0);
+}
 
 // ---------- סצנה ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 $('scene').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 4000);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 40000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.enablePan = false;
-controls.maxDistance = 500;
+controls.maxDistance = 8000;
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.28));
 const sunLight = new THREE.PointLight(0xfff4e0, 3, 0, 0);
@@ -39,8 +63,9 @@ const bodyById = Object.fromEntries(bodies.map((b) => [b.data.id, b]));
 
 function createBody(data, isSun) {
   const group = new THREE.Group();
+  // ציר הסיבוב מכוון לכיוון האמיתי של הקוטב הצפוני (כך העונות בכדור הארץ נכונות)
   const tilt = new THREE.Group();
-  tilt.rotation.z = data.tilt * DEG;
+  tilt.quaternion.setFromUnitVectors(UP, poleVector(data.pole));
   group.add(tilt);
   scene.add(group);
 
@@ -52,7 +77,7 @@ function createBody(data, isSun) {
   const mesh = new THREE.Mesh(geo, mat);
   tilt.add(mesh);
 
-  const body = { data, group, tilt, mesh, spin: 0, isSun };
+  const body = { data, group, tilt, mesh, spin: 0, isSun, au: new THREE.Vector3() };
   mesh.userData.body = body;
 
   if (isSun) {
@@ -62,7 +87,7 @@ function createBody(data, isSun) {
     glow.scale.setScalar(data.size * 5.5);
     group.add(glow);
   } else {
-    body.orbitLine = createOrbit(data.orbit, data.color);
+    body.orbitLine = createOrbit(data.color);
   }
 
   if (data.rings) {
@@ -82,15 +107,11 @@ function createBody(data, isSun) {
   }
 
   if (data.moon) {
-    const pivot = new THREE.Group();
-    group.add(pivot);
-    const moon = new THREE.Mesh(
+    body.moon = new THREE.Mesh(
       new THREE.SphereGeometry(data.moon.size, 32, 16),
       new THREE.MeshStandardMaterial({ map: planetTexture('moon'), roughness: 1 }),
     );
-    moon.position.x = data.moon.distance;
-    pivot.add(moon);
-    body.moonPivot = pivot;
+    group.add(body.moon);
   }
 
   body.label = createLabel(body);
@@ -98,18 +119,33 @@ function createBody(data, isSun) {
   return body;
 }
 
-function createOrbit(radius, color) {
-  const pts = [];
-  for (let i = 0; i <= 256; i++) {
-    const a = (i / 256) * Math.PI * 2;
-    pts.push(new THREE.Vector3(Math.cos(a) * radius, 0, -Math.sin(a) * radius));
-  }
-  const line = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 }),
-  );
+function createOrbit(color) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(361 * 3), 3));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 }));
+  line.frustumCulled = false;
   scene.add(line);
   return line;
+}
+
+// המסלולים משתנים לאט מאוד (במשך מאות שנים), לכן מחשבים אותם מחדש רק כשהזמן זז הרבה
+let orbitsDays = null;
+let orbitsMix = null;
+function updateOrbits() {
+  const recompute = orbitsDays === null || Math.abs(simDays - orbitsDays) > 3650;
+  if (!recompute && orbitsMix === scaleMix) return;
+  if (recompute) orbitsDays = simDays;
+  orbitsMix = scaleMix;
+  for (const b of bodies) {
+    if (!b.orbitLine) continue;
+    if (recompute) b.orbitAU = orbitPoints(b.data.id, simDays, 360);
+    const attr = b.orbitLine.geometry.attributes.position;
+    b.orbitAU.forEach((p, i) => {
+      toDisplay(p, tmp);
+      attr.setXYZ(i, tmp.x, tmp.y, tmp.z);
+    });
+    attr.needsUpdate = true;
+  }
 }
 
 function addStars() {
@@ -118,7 +154,7 @@ function addStars() {
   const col = new Float32Array(count * 3);
   const v = new THREE.Vector3();
   for (let i = 0; i < count; i++) {
-    v.randomDirection().multiplyScalar(900 + Math.random() * 900);
+    v.randomDirection().multiplyScalar(12000 + Math.random() * 12000);
     pos.set([v.x, v.y, v.z], i * 3);
     const t = Math.random();
     const b = 0.55 + Math.random() * 0.45;
@@ -151,7 +187,6 @@ for (const body of bodies) {
 }
 
 // ---------- זמן ----------
-let simDays = (Date.now() - J2000) / DAY_MS;
 let daysPerSecond = 5;
 let playing = true;
 
@@ -190,17 +225,24 @@ function updateBodies(dt) {
   for (const b of bodies) {
     const d = b.data;
     if (!b.isSun) {
-      const a = d.L0 * DEG + (2 * Math.PI * simDays) / d.period;
-      b.group.position.set(Math.cos(a) * d.orbit, 0, -Math.sin(a) * d.orbit);
+      heliocentric(d.id, simDays, b.au);
+      toDisplay(b.au, b.group.position);
     }
+    b.group.scale.setScalar(1 + ((b.isSun ? REAL_SIZE.sun : REAL_SIZE.planet) - 1) * scaleMix);
     if (playing) {
       const omega = ((2 * Math.PI) / d.rotation) * daysPerSecond;
       b.spin += Math.sign(omega) * Math.min(Math.abs(omega), MAX_SPIN) * dt;
     }
     b.mesh.rotation.y = b.spin;
-    if (b.moonPivot) b.moonPivot.rotation.y = (2 * Math.PI * simDays) / d.moon.period;
+    if (b.moon) {
+      // הירח במיקום האמיתי שלו סביב כדור הארץ (המרחק מוגדל), ותמיד אותו צד פונה אלינו
+      moonDirection(simDays, b.moon.position).multiplyScalar(d.moon.distance);
+      b.moon.lookAt(b.group.position);
+    }
   }
 }
+
+const sizeOf = (b) => b.data.size * b.group.scale.x;
 
 // ---------- מצלמה ----------
 const tmp = new THREE.Vector3();
@@ -209,11 +251,13 @@ let followBody = null;
 let tween = null;
 
 function overviewPosition() {
-  const far = camera.aspect < 1 ? 1.9 : 1;
-  return new THREE.Vector3(0, 85 * far, 125 * far);
+  const far = camera.aspect < 1 ? 2.3 : 1;
+  const compressed = new THREE.Vector3(0, 118, 174);
+  const real = new THREE.Vector3(0, 2100, 3300);
+  return compressed.lerp(real, scaleMix).multiplyScalar(far);
 }
 
-function flyTo(body) {
+function flyTo(body, duration = null) {
   const from = { pos: camera.position.clone(), target: controls.target.clone() };
   let offset;
   if (!body) {
@@ -222,15 +266,17 @@ function flyTo(body) {
     offset = new THREE.Vector3(0, 9, 26).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
   } else {
     // המצלמה מוצבת בין השמש לכוכב הלכת (בזווית), כדי לראות את הצד המואר
-    const dist = (body.data.size * (body.data.rings ? 7 : 5.5) + 3) * (camera.aspect < 1 ? 1.6 : 1);
+    const dist = (sizeOf(body) * (body.data.rings ? 7 : 5.5) + 3) * (camera.aspect < 1 ? 1.6 : 1);
     const out = body.group.position.clone().normalize();
     offset = out.negate().applyAxisAngle(new THREE.Vector3(0, 1, 0), 40 * DEG).multiplyScalar(dist);
     offset.y = dist * 0.35;
   }
-  tween = { from, offset, body, t: 0, duration: 1.8 };
+  // טיסה ארוכה יותר כשהדרך ארוכה (למשל במרחקים אמיתיים)
+  const travel = from.target.distanceTo(body ? body.group.position : new THREE.Vector3());
+  tween = { from, offset, body, t: 0, duration: duration ?? 1.8 + Math.min(1.7, travel / 600) };
   followBody = body;
   controls.enabled = false;
-  controls.minDistance = body ? body.data.size * 1.6 : 5;
+  controls.minDistance = body ? sizeOf(body) * 1.6 : 5;
 }
 
 function updateCamera(dt) {
@@ -242,7 +288,7 @@ function updateCamera(dt) {
     camera.position.lerpVectors(tween.from.pos, camPos, e);
     // מעוף בקשת כלפי מעלה, ולא דרך השמש
     camera.position.y += Math.sin(Math.PI * e) * tween.from.pos.distanceTo(camPos) * 0.35;
-    const minR = SUN.size * 2.2;
+    const minR = sizeOf(sun) * 2.2;
     if (camera.position.length() < minR) camera.position.setLength(minR);
     controls.target.lerpVectors(tween.from.target, targetPos, e);
     if (tween.t >= 1) {
@@ -277,9 +323,13 @@ function updateViewOffset(dt) {
 }
 
 // ---------- תוויות על המסך ----------
+// סדר עדיפות לתוויות: הכוכב שנבחר, השמש, ואז מהגדול לקטן. תווית שמתנגשת באחרת מוסתרת.
+const labelOrder = () => [...bodies].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
+
 function updateLabels() {
   const w = window.innerWidth, h = window.innerHeight;
-  for (const b of bodies) {
+  const placed = [];
+  for (const b of labelOrder()) {
     tmp.copy(b.group.position).project(camera);
     if (tmp.z > 1) {
       b.label.style.display = 'none';
@@ -289,8 +339,12 @@ function updateLabels() {
     const y = (-tmp.y * 0.5 + 0.5) * h;
     // רדיוס הכוכב על המסך, כדי למקם את התווית מתחתיו
     const dist = camera.position.distanceTo(b.group.position);
-    const px = (b.data.size / dist) * (h / 2) / Math.tan((camera.fov * DEG) / 2);
-    const hide = b === followBody && px > 60;
+    const px = (sizeOf(b) / dist) * (h / 2) / Math.tan((camera.fov * DEG) / 2);
+    const lw = (b.labelWidth ||= b.label.offsetWidth || 70);
+    const box = { x0: x - lw / 2, x1: x + lw / 2, y0: y + px + 6, y1: y + px + 30 };
+    const overlaps = placed.some((o) => box.x0 < o.x1 && box.x1 > o.x0 && box.y0 < o.y1 && box.y1 > o.y0);
+    const hide = (b === followBody && px > 60) || overlaps;
+    if (!hide) placed.push(box);
     b.label.style.display = hide ? 'none' : '';
     b.label.style.transform = `translate(-50%, 0) translate(${x}px, ${y + px + 6}px)`;
   }
@@ -449,6 +503,33 @@ function markActive(body) {
   }
 }
 
+const distFmt = new Intl.NumberFormat('he-IL', { maximumFractionDigits: 1 });
+function updateLiveDistance() {
+  const el = $('panel-live');
+  if (!selected || selected.isSun || $('panel').hidden) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  const million = selected.au.length() * 149.598;
+  const text = million >= 1000 ? `${distFmt.format(million / 1000)} מיליארד ק"מ` : `${distFmt.format(million)} מיליון ק"מ`;
+  if (el.dataset.text !== text) el.textContent = el.dataset.text = `המרחק מהשמש עכשיו: ${text}`;
+}
+
+$('btn-scale').addEventListener('click', () => {
+  scaleTarget = 1 - scaleTarget;
+  $('btn-scale').querySelector('span').textContent = scaleTarget ? 'מרחקים מוקטנים' : 'מרחקים אמיתיים';
+  $('btn-scale').title = scaleTarget ? 'מעבר למרחקים מוקטנים' : 'מעבר למרחקים אמיתיים';
+  if (tour) endTour();
+  markActive(null);
+  flyTo(null, 3);
+  const info = scaleTarget ? SCALE_REAL : SCALE_COMPRESSED;
+  presenter.play('open', 2.6);
+  showPanel({ title: info.title, text: info.narration });
+  if (voiceOn) speakCurrent();
+  else stopSpeaking();
+});
+
 function showBody(body) {
   const d = body.data;
   markActive(body);
@@ -578,7 +659,13 @@ let lastDateText = '';
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   if (playing) simDays += daysPerSecond * dt;
+  if (scaleT !== scaleTarget) {
+    scaleT = scaleTarget > scaleT ? Math.min(1, scaleT + dt / 2.8) : Math.max(0, scaleT - dt / 2.8);
+    scaleMix = scaleT * scaleT * (3 - 2 * scaleT);
+  }
   updateBodies(dt);
+  updateOrbits();
+  updateLiveDistance();
   updateCamera(dt);
   controls.update();
   updateViewOffset(dt);
