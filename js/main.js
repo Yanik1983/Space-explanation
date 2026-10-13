@@ -551,8 +551,8 @@ $('start-tour').addEventListener('click', () => {
 });
 $('start-free').addEventListener('click', () => {
   closeIntro();
-  // "פותח" את מנוע ההקראה בדפדפנים שדורשים לחיצה של המשתמש (למשל ספארי)
-  if (narrator.supported) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+  // "פותח" את ההקראה בדפדפנים שדורשים לחיצה של המשתמש (למשל ספארי)
+  narrator.unlock();
 });
 
 function updateVoiceNote() {
