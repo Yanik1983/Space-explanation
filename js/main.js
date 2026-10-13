@@ -729,6 +729,12 @@ let guideOn = true;
 let presenterPos = '';
 let lookSide = 0;
 
+// הגובה שבו מתחילה שורת הכפתורים בתחתית (משתנה בין מחשב, טלפון לאורך וטלפון לרוחב)
+const chooserTop = () => {
+  const c = $('chooser');
+  return c.offsetParent ? c.getBoundingClientRect().top - 4 : window.innerHeight - 8;
+};
+
 // ממקם את נועם ליד מה שהוא מסביר: כרטיס הפתיחה, חלון ההסבר, או בפינה
 function placePresenter() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -753,7 +759,7 @@ function placePresenter() {
       y = r.top - ph + 18;
     } else {
       x = r.right - 6;
-      y = Math.min(r.bottom, h - 84) - ph;
+      y = Math.min(r.bottom, chooserTop()) - ph;
       lookSide = -1;
     }
   } else if (phone) {
@@ -761,7 +767,7 @@ function placePresenter() {
     y = document.querySelector('.timebar').getBoundingClientRect().top - ph + 14;
   } else {
     x = 12;
-    y = h - 84 - ph;
+    y = chooserTop() - ph;
   }
   const pos = `translate(${Math.round(x)}px, ${Math.round(Math.max(0, y))}px)`;
   if (pos !== presenterPos) presenterEl.style.transform = presenterPos = pos;
