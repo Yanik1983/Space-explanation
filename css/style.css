@@ -74,7 +74,7 @@ html, body {
   font-weight: 700;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
 }
-.actions { display: flex; gap: 8px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ---------- זמן ---------- */
 .timebar {
@@ -200,6 +200,8 @@ html, body {
   box-shadow: inset -8px -6px 12px rgba(0, 0, 0, 0.45);
 }
 .listen { margin: 14px 0 6px; }
+.live { margin: 6px 0 0; font-size: 14px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.live[hidden] { display: none; }
 .narration { font-size: 17px; line-height: 1.7; margin: 8px 0; }
 .narration span { border-radius: 6px; transition: background 0.2s; }
 .narration span.speaking { background: var(--highlight); }
@@ -316,4 +318,5 @@ html, body {
   .chooser { justify-content: flex-start; }
   .chip { min-width: 58px; font-size: 12px; }
   .presenter { width: 130px; height: 165px; }
+  .hide-phone { display: none; }
 }
