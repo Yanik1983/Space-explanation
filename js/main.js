@@ -6,6 +6,7 @@ import { planetTexture, ringTexture, glowTexture } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './presenter.js';
 import { GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION } from './glossary.js';
+import { MOONS } from './moons.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -58,6 +59,7 @@ addStars();
 
 // ---------- גופים ----------
 const bodies = [];
+let moonTexture = null; // טקסטורה משותפת לירחים
 const sun = createBody(SUN, true);
 for (const p of PLANETS) createBody(p, false);
 const bodyById = Object.fromEntries(bodies.map((b) => [b.data.id, b]));
@@ -114,6 +116,31 @@ function createBody(data, isSun) {
     );
     group.add(body.moon);
   }
+
+  // הירחים החשובים: מקיפים במישור קו המשווה של כוכב הלכת
+  body.moons = (MOONS[data.id] || []).map((m) => {
+    let mesh = body.moon, pivot = null;
+    if (m.render !== false) {
+      pivot = new THREE.Group();
+      tilt.add(pivot);
+      moonTexture ||= planetTexture('moon');
+      mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(m.size, 24, 16),
+        new THREE.MeshStandardMaterial({ map: moonTexture, color: m.color, roughness: 1 }),
+      );
+      mesh.position.x = data.size * m.dist;
+      pivot.add(mesh);
+    }
+    const entry = { data: m, planet: body, pivot, mesh, angle: Math.random() * Math.PI * 2 };
+    mesh.userData.moon = entry;
+    entry.label = document.createElement('div');
+    entry.label.className = 'label moon-label';
+    entry.label.textContent = m.title;
+    entry.label.style.display = 'none';
+    entry.label.addEventListener('click', () => openMoon(entry));
+    $('labels').appendChild(entry.label);
+    return entry;
+  });
 
   body.label = createLabel(body);
   bodies.push(body);
@@ -248,6 +275,14 @@ function updateBodies(dt) {
       moonDirection(simDays, b.moon.position).multiplyScalar(d.moon.distance);
       b.moon.lookAt(b.group.position);
     }
+    for (const m of b.moons) {
+      if (!m.pivot) continue;
+      if (playing) {
+        const omega = ((2 * Math.PI) / m.data.period) * daysPerSecond;
+        m.angle += Math.sign(omega) * Math.min(Math.abs(omega), 2.5) * dt;
+      }
+      m.pivot.rotation.y = m.angle;
+    }
   }
 }
 
@@ -358,6 +393,27 @@ function updateLabels() {
     b.label.style.display = hide ? 'none' : '';
     b.label.style.transform = `translate(-50%, 0) translate(${x}px, ${y + px + 6}px)`;
   }
+  // שמות הירחים מוצגים רק ליד כוכב הלכת שנבחר
+  for (const b of bodies) {
+    for (const m of b.moons) {
+      let show = b === selected && b === followBody && !tween;
+      if (show) {
+        m.mesh.getWorldPosition(tmp).project(camera);
+        show = tmp.z < 1;
+      }
+      if (show) {
+        const x = (tmp.x * 0.5 + 0.5) * w, y = (-tmp.y * 0.5 + 0.5) * h + 8;
+        const lw = (m.labelWidth ||= m.label.offsetWidth || 50);
+        const box = { x0: x - lw / 2, x1: x + lw / 2, y0: y, y1: y + 20 };
+        show = !placed.some((o) => box.x0 < o.x1 && box.x1 > o.x0 && box.y0 < o.y1 && box.y1 > o.y0);
+        if (show) {
+          placed.push(box);
+          m.label.style.transform = `translate(-50%, 0) translate(${x}px, ${y}px)`;
+        }
+      }
+      m.label.style.display = show ? '' : 'none';
+    }
+  }
 }
 
 // ---------- בחירה בלחיצה ----------
@@ -368,8 +424,9 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y) > 6) return;
   const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObjects(bodies.map((b) => b.mesh))[0];
-  if (hit) userSelect(hit.object.userData.body);
+  const hit = raycaster.intersectObjects([...bodies.map((b) => b.mesh), ...bodies.flatMap((b) => b.moons.map((m) => m.mesh))])[0];
+  if (hit?.object.userData.moon) openMoon(hit.object.userData.moon);
+  else if (hit) userSelect(hit.object.userData.body);
 });
 
 // ---------- חלון מידע והקראה ----------
@@ -450,6 +507,7 @@ function showPanel({ title, subtitle = '', color = null, text, facts = [], funFa
     }),
   );
   $('panel-fun').replaceChildren(...linkTerms(funFact, used));
+  $('panel-moons').hidden = true;
   $('panel-facts').replaceChildren(
     ...facts.flatMap(([k, v]) => {
       const dt = document.createElement('dt');
@@ -576,6 +634,7 @@ function openTerm(term, from = 'panel') {
   $('term-list').hidden = true;
   $('term-emoji').textContent = term.emoji;
   $('term-title').textContent = term.title;
+  $('term-kicker').textContent = term.kicker || 'נועם מסביר מושג';
   $('term-text').replaceChildren(
     ...splitSentences(term.text).flatMap((s) => {
       const span = document.createElement('span');
@@ -737,6 +796,31 @@ function showBody(body) {
   presenter.play('point', 2.4);
   flyTo(body);
   showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+  if (body.moons.length) {
+    const h = document.createElement('h3');
+    h.textContent = body.moons.length === 1 ? '🌙 לחצו כדי לשמוע על הירח:' : `🌙 הירחים החשובים של ${d.name}:`;
+    const list = document.createElement('div');
+    list.className = 'moons-list';
+    for (const m of body.moons) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.textContent = `${m.data.emoji} ${m.data.title}`;
+      btn.addEventListener('click', () => openMoon(m));
+      list.appendChild(btn);
+    }
+    $('panel-moons').replaceChildren(h, list);
+    $('panel-moons').hidden = false;
+  }
+}
+
+// נועם מסביר על ירח, באותו כרטיס של המושגים
+function openMoon(m) {
+  if (selected !== m.planet) {
+    if (tour) endTour();
+    showBody(m.planet);
+  }
+  openTerm({ ...m.data, kicker: `ירח של ${m.planet.data.name}` }, 'panel');
 }
 
 function userSelect(body) {

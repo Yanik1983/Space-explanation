@@ -258,6 +258,14 @@ html, body {
 .ask p { margin: 0 0 10px; font-size: 17px; }
 .ask-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* ---------- ירחים ---------- */
+.moons { margin: 12px 0; }
+.moons[hidden] { display: none; }
+.moons h3 { margin: 0 0 8px; font-size: 15px; color: var(--muted); font-weight: 500; }
+.moons-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.moons-list .btn { font-size: 14px; padding: 6px 12px; }
+.label.moon-label { font-size: 12px; padding: 1px 8px; color: #dfe4ff; }
+
 /* ---------- מושגים ---------- */
 .term {
   font: inherit;
