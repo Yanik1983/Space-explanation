@@ -278,8 +278,11 @@ html, body {
   position: fixed;
   left: 0;
   top: 0;
-  width: 240px;
-  height: 300px;
+  width: 300px;
+  height: 330px;
+  /* הגוף נעלם בהדרגה בתחתית, במקום להיחתך בקו ישר */
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 98%);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 98%);
   pointer-events: none;
   z-index: 11;
   transition: transform 0.7s cubic-bezier(0.3, 1.25, 0.5, 1);
@@ -317,6 +320,6 @@ html, body {
   body.panel-open .timebar { display: none; }
   .chooser { justify-content: flex-start; }
   .chip { min-width: 58px; font-size: 12px; }
-  .presenter { width: 130px; height: 165px; }
+  .presenter { width: 150px; height: 165px; }
   .hide-phone { display: none; }
 }
