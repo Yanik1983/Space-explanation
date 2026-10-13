@@ -271,6 +271,7 @@ html, body {
 .moons h3 { margin: 0 0 8px; font-size: 15px; color: var(--muted); font-weight: 500; }
 .moons-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .moons-list .btn { font-size: 14px; padding: 6px 12px; }
+.label.motion-label { color: #cfe0ff; border-color: rgba(157, 184, 255, 0.6); pointer-events: none; }
 .label.moon-label { font-size: 12px; padding: 1px 8px; color: #dfe4ff; }
 
 /* ---------- מושגים ---------- */
