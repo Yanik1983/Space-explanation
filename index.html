@@ -32,8 +32,27 @@
       <button id="btn-scale" class="btn" type="button" title="מעבר למרחקים אמיתיים">📏 <span class="hide-phone">מרחקים אמיתיים</span></button>
       <button id="btn-guide" class="btn btn-icon" type="button" aria-pressed="true" title="הסתרת נועם המדריך">👦</button>
       <button id="btn-voice" class="btn btn-icon" type="button" aria-pressed="true" title="קריין פועל">🔊</button>
+      <button id="btn-settings" class="btn btn-icon" type="button" aria-expanded="false" aria-controls="settings" title="הגדרות קול">⚙️</button>
     </div>
   </header>
+
+  <div id="settings" class="settings" role="dialog" aria-label="הגדרות קול" hidden>
+    <h2>הגדרות קול</h2>
+    <label class="setting">
+      <span>גובה הקול <output id="pitch-value"></output></span>
+      <input id="pitch" type="range" min="0.75" max="1.5" step="0.05">
+      <span class="setting-ends"><span>נמוך</span><span>גבוה</span></span>
+    </label>
+    <label class="setting">
+      <span>מהירות הדיבור <output id="rate-value"></output></span>
+      <input id="rate" type="range" min="0.6" max="1.5" step="0.05">
+      <span class="setting-ends"><span>לאט</span><span>מהר</span></span>
+    </label>
+    <div class="settings-actions">
+      <button id="settings-test" class="btn btn-primary btn-small" type="button">🔊 נסו</button>
+      <button id="settings-reset" class="btn btn-small" type="button">איפוס</button>
+    </div>
+  </div>
 
   <section class="timebar" aria-label="שליטה בזמן">
     <button id="btn-play" class="btn btn-icon" type="button" title="עצירת הזמן">⏸</button>
