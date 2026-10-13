@@ -1,0 +1,19 @@
+{
+  "text": "שלום! קוראים לי נועם, ואני אהיה המדריך שלכם. ברוכים הבאים למערכת השמש! במרכז נמצאת השמש, ומסביבה מסתובבים שמונה כוכבי לכת.",
+  "samples": [
+    {
+      "file": "A1.wav",
+      "prompt": "A cheerful ten-year-old Israeli boy with a young child's bright, high voice, speaking Hebrew naturally and enthusiastically, like a kid excitedly telling his friends something",
+      "seed": 1,
+      "audio_s": 10.9,
+      "took_s": 42
+    },
+    {
+      "file": "B1.wav",
+      "prompt": "10-year-old boy, child's voice, friendly and excited",
+      "seed": 1,
+      "audio_s": 9.1,
+      "took_s": 35
+    }
+  ]
+}
