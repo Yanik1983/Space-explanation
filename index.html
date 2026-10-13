@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>מסע במערכת השמש</title>
+  <meta name="description" content="מערכת השמש בתלת־ממד עם הסברים בעברית ובקול, לילדים ולכל המשפחה">
+  <meta name="theme-color" content="#05060f">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🪐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="scene" aria-label="הדמיה תלת־ממדית של מערכת השמש"></div>
+  <div id="labels"></div>
+
+  <header class="topbar">
+    <h1 class="brand">מסע במערכת השמש</h1>
+    <div class="actions">
+      <button id="btn-tour" class="btn btn-primary" type="button">סיור מודרך</button>
+      <button id="btn-overview" class="btn" type="button">מבט מלמעלה</button>
+      <button id="btn-voice" class="btn btn-icon" type="button" aria-pressed="true" title="קריין פועל">🔊</button>
+    </div>
+  </header>
+
+  <section class="timebar" aria-label="שליטה בזמן">
+    <button id="btn-play" class="btn btn-icon" type="button" title="עצירת הזמן">⏸</button>
+    <label class="speed">
+      <span>מהירות הזמן</span>
+      <input id="speed" type="range" min="0" max="100" step="1" value="56">
+    </label>
+    <div class="clock">
+      <span id="speed-label"></span>
+      <span id="date-label"></span>
+    </div>
+    <button id="btn-today" class="btn btn-small" type="button">היום</button>
+  </section>
+
+  <aside id="panel" class="panel" hidden aria-live="polite">
+    <button id="panel-close" class="close" type="button" aria-label="סגירה">✕</button>
+    <div class="panel-head">
+      <span id="panel-dot" class="dot"></span>
+      <div>
+        <h2 id="panel-title"></h2>
+        <p id="panel-subtitle" class="subtitle"></p>
+      </div>
+    </div>
+    <button id="btn-listen" class="btn btn-primary listen" type="button">🔊 הקשיבו</button>
+    <p id="panel-text" class="narration"></p>
+    <div id="panel-fun" class="fun"></div>
+    <dl id="panel-facts" class="facts"></dl>
+  </aside>
+
+  <div id="tourbar" class="tourbar" hidden>
+    <button id="tour-prev" class="btn" type="button">→ הקודם</button>
+    <span id="tour-step"></span>
+    <button id="tour-next" class="btn" type="button">הבא ←</button>
+    <button id="tour-stop" class="btn btn-small" type="button">סיום</button>
+  </div>
+
+  <nav id="chooser" class="chooser" aria-label="בחירת כוכב לכת"></nav>
+
+  <div id="intro" class="intro">
+    <div class="intro-card">
+      <div class="intro-emoji" aria-hidden="true">🪐</div>
+      <h2>מסע במערכת השמש</h2>
+      <p>בואו להכיר את השמש ואת שמונת כוכבי הלכת, לראות איך כולם מסתובבים, ולשמוע עליהם סיפורים.</p>
+      <div class="intro-actions">
+        <button id="start-tour" class="btn btn-primary btn-big" type="button">🚀 יוצאים לסיור מודרך</button>
+        <button id="start-free" class="btn btn-big" type="button">לחקור לבד</button>
+      </div>
+      <p id="voice-note" class="voice-note" hidden></p>
+      <p class="hint">טיפ: גוררים כדי לסובב את המבט, וצובטים או גוללים כדי להתקרב.</p>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
