@@ -10,6 +10,9 @@ on:
       - tools/**
       - .github/workflows/narration-audio.yml
   workflow_dispatch:
+  # פעם בשבוע בודקים שוב: אם edge-tts חזר לעבוד, הקבצים נוצרים מחדש בקול שלו
+  schedule:
+    - cron: '17 4 * * 1'
 
 permissions:
   contents: write
@@ -20,8 +23,8 @@ concurrency:
 
 jobs:
   generate:
-    # רק ב־branch הראשי, שממנו האתר מתפרסם
-    if: github.ref_name == github.event.repository.default_branch
+    # בדחיפה – רק ב־branch הראשי, שממנו האתר מתפרסם. הרצה ידנית אפשרית בכל branch.
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +37,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - run: pip install edge-tts
+      - uses: actions/cache@v4
+        with:
+          path: .cache/tts-models
+          key: tts-models-v1
+
+      - run: pip install -r tools/requirements-audio.txt
 
       - run: python3 tools/generate_audio.py
 
