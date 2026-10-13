@@ -46,6 +46,11 @@ const ELEMENTS = {
     [30.06992276, 0.00859048, 1.77004347, -55.12002969, 44.96476227, 131.78422574],
     [0.00026291, 0.00005105, 0.00035372, 218.45945325, -0.32241464, -0.00508664],
   ],
+  // פלוטו (כוכב לכת ננסי) – מאותה טבלה של JPL
+  pluto: [
+    [39.48211675, 0.2488273, 17.14001206, 238.92903833, 224.06891629, 110.30393684],
+    [-0.00031596, 0.0000517, 0.00004818, 145.20780515, -0.04062942, -0.01183482],
+  ],
 };
 
 function elementsAt(id, days) {
@@ -110,4 +115,37 @@ export function poleVector([ra, dec]) {
   const ey = y * Math.cos(OBLIQUITY) + z * Math.sin(OBLIQUITY);
   const ez = -y * Math.sin(OBLIQUITY) + z * Math.cos(OBLIQUITY);
   return new THREE.Vector3(x, ez, -ey).normalize();
+}
+
+// חגורת האסטרואידים: אלפי סלעים, כל אחד במסלול קפלרי משלו (אקראי, בתחום האמיתי של החגורה)
+export function makeAsteroids(n) {
+  const gaps = [2.5, 2.82, 2.95]; // פערי קירקווד – אזורים כמעט ריקים בגלל צדק
+  const list = [];
+  while (list.length < n) {
+    const a = 2.1 + Math.random() * 1.2;
+    if (gaps.some((g) => Math.abs(a - g) < 0.025)) continue;
+    const e = Math.random() * 0.18;
+    const I = Math.random() ** 2 * 18 * DEG;
+    const node = Math.random() * Math.PI * 2;
+    const w = Math.random() * Math.PI * 2;
+    const cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(node), sO = Math.sin(node), cI = Math.cos(I), sI = Math.sin(I);
+    list.push({
+      a, e, b: a * Math.sqrt(1 - e * e),
+      M0: Math.random() * Math.PI * 2,
+      n: (2 * Math.PI) / (365.256 * a ** 1.5),
+      // מקדמי הסיבוב מהמישור של המסלול למערכת של three.js
+      p: [cw * cO - sw * sO * cI, -sw * cO - cw * sO * cI, cw * sO + sw * cO * cI, -sw * sO + cw * cO * cI, sw * sI, cw * sI],
+    });
+  }
+  return list;
+}
+
+export function asteroidPosition(ast, days, out) {
+  let M = ast.M0 + ast.n * days;
+  let E = M + ast.e * Math.sin(M);
+  E -= (E - ast.e * Math.sin(E) - M) / (1 - ast.e * Math.cos(E));
+  E -= (E - ast.e * Math.sin(E) - M) / (1 - ast.e * Math.cos(E));
+  const xp = ast.a * (Math.cos(E) - ast.e), yp = ast.b * Math.sin(E);
+  const p = ast.p;
+  return out.set(p[0] * xp + p[1] * yp, p[4] * xp + p[5] * yp, -(p[2] * xp + p[3] * yp));
 }

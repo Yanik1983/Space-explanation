@@ -134,6 +134,23 @@ const makers = {
     });
   },
   moon: () => rocky('#a8a8a8', '#6f6f6f', '#d6d6d6', 51, 5),
+  pluto: () => {
+    const tex = rocky('#c9b29a', '#7d5c45', '#eadccb', 111, 3);
+    // הלב הבהיר (טומבו רג'יו) שגילתה ניו הורייזנס
+    const ctx = tex.image.getContext('2d');
+    ctx.fillStyle = 'rgba(250,244,236,0.92)';
+    ctx.beginPath();
+    ctx.arc(250, 122, 26, 0, Math.PI * 2);
+    ctx.arc(290, 118, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(226, 132);
+    ctx.lineTo(318, 128);
+    ctx.lineTo(268, 176);
+    ctx.fill();
+    tex.needsUpdate = true;
+    return tex;
+  },
   mars: () => {
     const base = rocky('#c1440e', '#7a2a0a', '#e07a3c', 61, 3);
     // כיפות קרח בקטבים

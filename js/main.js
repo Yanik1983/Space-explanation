@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED } from './data.js';
-import { heliocentric, orbitPoints, moonDirection, poleVector } from './orbits.js';
+import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT } from './data.js';
+import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './presenter.js';
@@ -63,6 +63,38 @@ let moonTexture = null; // טקסטורה משותפת לירחים
 const sun = createBody(SUN, true);
 for (const p of PLANETS) createBody(p, false);
 const bodyById = Object.fromEntries(bodies.map((b) => [b.data.id, b]));
+
+// ---------- חגורת האסטרואידים ----------
+// "גוף" מיוחד: אין לו כדור, רק נקודה במרכז החגורה שהמצלמה טסה אליה
+const belt = { data: ASTEROID_BELT, group: new THREE.Object3D(), isBelt: true, moons: [], au: new THREE.Vector3(0, 0, 2.75) };
+const asteroids = makeAsteroids(window.innerWidth <= 720 ? 1600 : 2600);
+const asteroidPoints = (() => {
+  const pos = new Float32Array(asteroids.length * 3);
+  const col = new Float32Array(asteroids.length * 3);
+  for (let i = 0; i < asteroids.length; i++) {
+    const k = 0.45 + Math.random() * 0.4;
+    col.set([k * 1.05, k * 0.95, k * 0.85], i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.32, vertexColors: true, sizeAttenuation: true }));
+  pts.frustumCulled = false;
+  scene.add(pts);
+  return pts;
+})();
+
+function updateAsteroids() {
+  const attr = asteroidPoints.geometry.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < asteroids.length; i++) {
+    toDisplay(asteroidPosition(asteroids[i], simDays, v), v);
+    attr.setXYZ(i, v.x, v.y, v.z);
+  }
+  attr.needsUpdate = true;
+  asteroidPoints.material.size = 0.32 * (1 + scaleMix * 1.5);
+  toDisplay(belt.au, belt.group.position);
+}
 
 function createBody(data, isSun) {
   const group = new THREE.Group();
@@ -212,6 +244,15 @@ for (const body of bodies) {
   chip.addEventListener('click', () => userSelect(body));
   $('chooser').appendChild(chip);
   body.chip = chip;
+  if (body.data.id === 'mars') {
+    const beltChip = document.createElement('button');
+    beltChip.type = 'button';
+    beltChip.className = 'chip';
+    beltChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🪨</span><span>אסטרואידים</span>';
+    beltChip.addEventListener('click', () => userSelect(belt));
+    $('chooser').appendChild(beltChip);
+    belt.chip = beltChip;
+  }
 }
 {
   const chip = document.createElement('button');
@@ -296,8 +337,8 @@ let tween = null;
 
 function overviewPosition() {
   const far = camera.aspect < 1 ? 2.3 : 1;
-  const compressed = new THREE.Vector3(0, 118, 174);
-  const real = new THREE.Vector3(0, 2100, 3300);
+  const compressed = new THREE.Vector3(0, 136, 200);
+  const real = new THREE.Vector3(0, 2500, 3900);
   return compressed.lerp(real, scaleMix).multiplyScalar(far);
 }
 
@@ -306,6 +347,11 @@ function flyTo(body, duration = null) {
   let offset;
   if (!body) {
     offset = null;
+  } else if (body.isBelt) {
+    // מבט מלמעלה ומבחוץ על החגורה
+    const out = body.group.position.clone().normalize();
+    const r = body.group.position.length();
+    offset = out.multiplyScalar(r * 0.55).add(new THREE.Vector3(0, r * 0.9, 0));
   } else if (body.isSun) {
     offset = new THREE.Vector3(0, 9, 26).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
   } else {
@@ -761,12 +807,13 @@ function markActive(body) {
     b.label.classList.toggle('active', on);
     if (b.orbitLine) b.orbitLine.material.opacity = on ? 0.85 : 0.3;
   }
+  belt.chip.classList.toggle('active', body === belt);
 }
 
 const distFmt = new Intl.NumberFormat('he-IL', { maximumFractionDigits: 1 });
 function updateLiveDistance() {
   const el = $('panel-live');
-  if (!selected || selected.isSun || $('panel').hidden) {
+  if (!selected || selected.isSun || selected.isBelt || $('panel').hidden) {
     el.hidden = true;
     return;
   }
@@ -900,7 +947,7 @@ $('settings-test').addEventListener('click', () => {
 // ---------- סיור מודרך ----------
 const tourSteps = [
   { intro: TOUR_INTRO },
-  ...bodies.map((body) => ({ body })),
+  ...bodies.flatMap((body) => (body.data.id === 'mars' ? [{ body }, { body: belt }] : [{ body }])),
   { intro: TOUR_OUTRO },
 ];
 let tour = null;
@@ -1005,6 +1052,7 @@ function frame() {
   }
   updateBodies(dt);
   updateOrbits();
+  updateAsteroids();
   updateLiveDistance();
   updateCamera(dt);
   controls.update();
