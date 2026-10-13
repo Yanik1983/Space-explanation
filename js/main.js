@@ -456,7 +456,11 @@ function speakCurrent(onEnd) {
   const spans = [...$('panel-text').querySelectorAll('span')];
   setListening(true);
   narrator.speak(currentText, {
-    onSentence: (i) => spans.forEach((s, j) => s.classList.toggle('speaking', i === j)),
+    onSentence: (i) => {
+      spans.forEach((s, j) => s.classList.toggle('speaking', i === j));
+      // בחלון קטן (בטלפון) גוללים אל המשפט שמוקרא עכשיו
+      spans[i]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    },
     onEnd: () => {
       spans.forEach((s) => s.classList.remove('speaking'));
       setListening(false);
@@ -570,6 +574,7 @@ let tour = null;
 function startTour() {
   tour = { index: 0, timer: null };
   $('tourbar').hidden = false;
+  document.body.classList.add('touring');
   goToStep(0);
 }
 
@@ -604,6 +609,7 @@ function endTour() {
   clearTimeout(tour.timer);
   tour = null;
   $('tourbar').hidden = true;
+  document.body.classList.remove('touring');
   stopSpeaking();
 }
 

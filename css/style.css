@@ -293,8 +293,9 @@ html, body {
 
 /* ---------- טלפון ---------- */
 @media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; padding: 10px 12px; }
-  .brand { font-size: 18px; }
+  .topbar { flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+  .brand { font-size: 17px; }
+  .actions { flex-wrap: nowrap; gap: 6px; }
   .btn { font-size: 14px; padding: 7px 12px; }
   .timebar {
     top: auto;
@@ -310,16 +311,19 @@ html, body {
     bottom: 84px;
     inset-inline: 8px;
     width: auto;
-    max-height: 42vh;
-    padding: 14px 16px;
+    max-height: 36vh;
+    padding: 12px 14px;
     z-index: 2;
   }
   .panel h2 { font-size: 22px; }
   .narration { font-size: 16px; }
-  .tourbar { bottom: auto; top: 98px; }
+  /* בזמן סיור: סרגל הסיור יורד לתחתית במקום בורר כוכבי הלכת, כדי לא להסתיר את מערכת השמש */
+  .tourbar { bottom: max(12px, env(safe-area-inset-bottom)); gap: 6px; padding: 6px 8px; }
+  body.touring .chooser { display: none; }
+  body.touring .panel { bottom: 70px; }
   body.panel-open .timebar { display: none; }
   .chooser { justify-content: flex-start; }
   .chip { min-width: 58px; font-size: 12px; }
-  .presenter { width: 150px; height: 165px; }
+  .presenter { width: 120px; height: 135px; }
   .hide-phone { display: none; }
 }
