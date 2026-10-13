@@ -1,0 +1,6 @@
+# תלויות של tools/generate_audio.py
+edge-tts
+phonikud @ git+https://github.com/thewh1teagle/phonikud
+phonikud-onnx
+piper-onnx
+soundfile

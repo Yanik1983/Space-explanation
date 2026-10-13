@@ -19,14 +19,18 @@
 2. **הקול המובנה של הדפדפן (Web Speech API):** משמש כשאין קבצים. בכרום, באנדרואיד ובמכשירי אפל יש בדרך כלל קול עברי. אם במכשיר אין קול עברי, האתר מציג הודעה, וההסברים מופיעים כטקסט. גם הסיור המודרך ממשיך להתקדם לבד.
 
 ### יצירת קבצי השמע
-הקבצים נוצרים בחינם עם [edge-tts](https://github.com/rany2/edge-tts), שמשתמש בקולות העבריים של Microsoft Edge. צריך Python, Node.js וחיבור לאינטרנט:
+הקבצים נוצרים בחינם, באחד משני מנועים:
+1. **[edge-tts](https://github.com/rany2/edge-tts):** הקולות העבריים של Microsoft Edge. זה המנוע המועדף.
+2. **[Phonikud](https://github.com/thewh1teagle/phonikud) + Piper:** מנוע עברי בקוד פתוח שרץ על המחשב עצמו. משתמשים בו כש־edge-tts לא עובד. רישיון המודלים שלו הוא לשימוש לא מסחרי בלבד.
+
+הסקריפט מנסה קודם את edge-tts, ואם הוא לא עובד, עובר ל־Phonikud. צריך Python 3.12 (או 3.8–3.12), Node.js, ffmpeg וחיבור לאינטרנט:
 
 ```bash
-pip install edge-tts
-python3 tools/generate_audio.py
+pip install -r tools/requirements-audio.txt
+python3 tools/generate_audio.py            # או: --engine edge / --engine phonikud
 ```
 
-- **אוטומטית:** הפעולה `.github/workflows/narration-audio.yml` ב־GitHub Actions מריצה את הסקריפט בכל שינוי בטקסטים, ומעלה את הקבצים למאגר. אפשר גם להריץ אותה ידנית בלשונית Actions.
+- **אוטומטית:** הפעולה `.github/workflows/narration-audio.yml` ב־GitHub Actions מריצה את הסקריפט בכל שינוי בטקסטים, וגם פעם בשבוע, ומעלה את הקבצים למאגר. כך, אם edge-tts חוזר לעבוד, הקול מתחלף אליו לבד. אפשר גם להריץ אותה ידנית בלשונית Actions.
 - הסקריפט יוצר MP3 לכל משפט ואת הקובץ `audio/manifest.json`. אחר כך מעלים את התיקייה `audio/` יחד עם האתר.
 - אחרי עריכת טקסט ב־`js/data.js` מריצים שוב. רק משפטים חדשים או ששונו נוצרים מחדש, וקבצים ישנים נמחקים.
 - משפט שאין לו קובץ מוקרא בקול של הדפדפן, כך ששום דבר לא נשבר.
