@@ -3,6 +3,7 @@
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT } from '../js/data.js';
 import { GLOSSARY, CONTINUE_QUESTION } from '../js/glossary.js';
 import { MOONS } from '../js/moons.js';
+import { COMETS, COMETS_INFO } from '../js/comets.js';
 import { splitSentences } from '../js/speech.js';
 
 const texts = [
@@ -10,6 +11,7 @@ const texts = [
   ...GLOSSARY.map((g) => g.text),
   CONTINUE_QUESTION,
   ...Object.values(MOONS).flat().map((m) => m.text),
+  ...[COMETS_INFO, ...COMETS].map((c) => c.narration),
 ];
 const sentences = [...new Set(texts.flatMap(splitSentences))];
 process.stdout.write(JSON.stringify(sentences, null, 2));

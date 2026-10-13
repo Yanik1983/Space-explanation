@@ -149,3 +149,36 @@ export function asteroidPosition(ast, days, out) {
   const p = ast.p;
   return out.set(p[0] * xp + p[1] * yp, p[4] * xp + p[5] * yp, -(p[2] * xp + p[3] * yp));
 }
+
+// שביטים: מסלול לפי אלמנטים קבועים ותאריך המעבר הקרוב ביותר לשמש
+function cometElements(el) {
+  return {
+    a: el.a, e: el.e, I: el.i * DEG, node: el.node * DEG, peri: (el.node + el.argPeri) * DEG,
+    T: (Date.parse(el.perihelion + 'T00:00:00Z') - Date.UTC(2000, 0, 1, 12)) / 86400000,
+    n: (2 * Math.PI) / (365.25 * el.a ** 1.5),
+  };
+}
+
+// פתרון משוואת קפלר שעובד גם במסלולים מעוכים מאוד (e קרוב ל־1)
+function solveKeplerHighE(M, e) {
+  M = Math.atan2(Math.sin(M), Math.cos(M));
+  let E = e > 0.8 ? Math.PI * Math.sign(M || 1) : M;
+  for (let i = 0; i < 50; i++) {
+    const d = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+    E -= d;
+    if (Math.abs(d) < 1e-10) break;
+  }
+  return E;
+}
+
+export function cometPosition(el, days, out) {
+  const c = (el._c ||= cometElements(el));
+  return placeOnOrbit(c, solveKeplerHighE(c.n * (days - c.T), c.e), out);
+}
+
+export function cometOrbitPoints(el, n = 720) {
+  const c = (el._c ||= cometElements(el));
+  const pts = [];
+  for (let i = 0; i <= n; i++) pts.push(placeOnOrbit(c, (i / n) * Math.PI * 2, new THREE.Vector3()));
+  return pts;
+}

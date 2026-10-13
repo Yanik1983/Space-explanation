@@ -14,6 +14,13 @@
 
 * { box-sizing: border-box; }
 
+html {
+  /* בטלפון: בלי הגדלת דף בצביטה או בהקשה כפולה (בסצנה מתקרבים עם האצבעות), ובלי הגדלת טקסט אוטומטית */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html, body {
   margin: 0;
   height: 100%;
@@ -393,3 +400,6 @@ body.term-open #panel { visibility: hidden; }
   .presenter { width: 120px; height: 135px; }
   .hide-phone { display: none; }
 }
+
+/* בחלונות ההסבר מותר רק לגלול למעלה ולמטה, בלי צביטה שמגדילה את כל הדף */
+.panel, .settings, .intro { touch-action: pan-y; }

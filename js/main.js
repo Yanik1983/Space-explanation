@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT } from './data.js';
-import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition } from './orbits.js';
+import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './presenter.js';
 import { GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION } from './glossary.js';
 import { MOONS } from './moons.js';
+import { COMETS, COMETS_INFO } from './comets.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -68,6 +69,7 @@ const bodies = [];
 const sun = createBody(SUN, true);
 for (const p of PLANETS) createBody(p, false);
 const bodyById = Object.fromEntries(bodies.map((b) => [b.data.id, b]));
+const comets = COMETS.map(createComet);
 
 // טקסטורות מפורטות נוצרות ברקע ומחליפות את הגרסה הקטנה, כוכב אחרי כוכב
 loadDetailed(['sun', 'jupiter', 'saturn', 'mars', 'venus', 'neptune', 'mercury', 'uranus', 'pluto'], (id, map, bump) => {
@@ -213,6 +215,100 @@ function earthMaterial() {
 }
 
 
+// ---------- שביטים ----------
+// "גוף" להסבר הכללי על שביטים (המצלמה טסה לשביט הקרוב ביותר לשמש)
+const cometsInfo = { data: COMETS_INFO, isCometsInfo: true, moons: [] };
+
+// זנב: מלבן שקוף שתמיד פונה למצלמה, בהיר ליד הראש ודועך לאורכו
+function tailMesh(color, strength) {
+  const geo = new THREE.PlaneGeometry(1, 1);
+  geo.translate(0.5, 0, 0);
+  const mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+    uniforms: { color: { value: new THREE.Color(color) }, strength: { value: strength } },
+    vertexShader: `${LOGDEPTH_V[0]}
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        ${LOGDEPTH_V[1]}
+      }`,
+    fragmentShader: `${LOGDEPTH_F[0]}
+      uniform vec3 color; uniform float strength; varying vec2 vUv;
+      void main() {
+        ${LOGDEPTH_F[1]}
+        float x = vUv.x;
+        float y = (vUv.y - 0.5) * 2.0;
+        float w = 0.15 + 0.85 * x;
+        float a = pow(1.0 - x, 1.4) * exp(-3.0 * y * y / (w * w)) * strength;
+        gl_FragColor = vec4(color * a, 1.0);
+      }`,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  }));
+  mesh.matrixAutoUpdate = false;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
+}
+
+function createComet(data) {
+  const group = new THREE.Group();
+  scene.add(group);
+  const nucleus = new THREE.Mesh(
+    new THREE.SphereGeometry(0.12, 16, 12),
+    new THREE.MeshStandardMaterial({ color: '#b8b0a6', emissive: '#3a3630', roughness: 1 }),
+  );
+  group.add(nucleus);
+  const coma = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(235,245,255,1)', 'rgba(120,180,255,0)'),
+    color: data.color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
+  }));
+  group.add(coma);
+  const comet = {
+    data, group, nucleus, coma, isComet: true, moons: [], au: new THREE.Vector3(),
+    ion: tailMesh('#7fb4ff', 1.1), dust: tailMesh('#ffe0a0', 0.85),
+    prev: new THREE.Vector3(), vel: new THREE.Vector3(0, 0, 1),
+    orbitAU: cometOrbitPoints(data.el, 720), orbitLine: createOrbit(data.color, 720),
+  };
+  nucleus.userData.body = comet;
+  comet.label = createLabel(comet);
+  return comet;
+}
+
+const tailTmp = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+function setTail(mesh, origin, dir, length, width) {
+  mesh.visible = length > 0.05;
+  if (!mesh.visible) return;
+  const [view, side, along, normal] = tailTmp;
+  view.subVectors(camera.position, origin).normalize();
+  side.crossVectors(dir, view).normalize().multiplyScalar(width);
+  along.copy(dir).multiplyScalar(length);
+  normal.crossVectors(along, side).normalize();
+  mesh.matrix.makeBasis(along, side, normal).setPosition(origin);
+  mesh.matrixWorldNeedsUpdate = true;
+}
+
+// השביט "מתעורר" כשהוא מתקרב לשמש: ענן זוהר וזנבות שהולכים ומתארכים
+const cometDir = [new THREE.Vector3(), new THREE.Vector3()];
+function updateComets() {
+  for (const c of comets) {
+    c.prev.copy(c.group.position);
+    toDisplay(cometPosition(c.data.el, simDays, c.au), c.group.position);
+    if (c.prev.distanceToSquared(c.group.position) > 1e-10) c.vel.subVectors(c.group.position, c.prev).normalize();
+    const act = Math.min(1, Math.max(0, (4.5 - c.au.length()) / 3.6)) ** 1.5;
+    c.coma.scale.setScalar(0.6 + act * 3.4);
+    c.coma.material.opacity = 0.35 + act * 0.65;
+    const far = 1 + scaleMix * 3;
+    const [anti, dust] = cometDir;
+    anti.copy(c.group.position).normalize(); // זנב הגז: תמיד הרחק מהשמש
+    dust.copy(anti).multiplyScalar(0.8).addScaledVector(c.vel, -0.45).normalize(); // זנב האבק: מתעקל אחורה
+    setTail(c.ion, c.group.position, anti, act * 16 * far, 0.5 + act * 1.4);
+    setTail(c.dust, c.group.position, dust, act * 11 * far, 0.9 + act * 2.8);
+  }
+}
+
 function createBody(data, isSun) {
   const group = new THREE.Group();
   // ציר הסיבוב מכוון לכיוון האמיתי של הקוטב הצפוני (כך העונות בכדור הארץ נכונות)
@@ -307,9 +403,9 @@ function createBody(data, isSun) {
   return body;
 }
 
-function createOrbit(color) {
+function createOrbit(color, n = 360) {
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(361 * 3), 3));
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((n + 1) * 3), 3));
   const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 }));
   line.frustumCulled = false;
   scene.add(line);
@@ -324,9 +420,9 @@ function updateOrbits() {
   if (!recompute && orbitsMix === scaleMix) return;
   if (recompute) orbitsDays = simDays;
   orbitsMix = scaleMix;
-  for (const b of bodies) {
+  for (const b of [...bodies, ...comets]) {
     if (!b.orbitLine) continue;
-    if (recompute) b.orbitAU = orbitPoints(b.data.id, simDays, 360);
+    if (recompute && !b.isComet) b.orbitAU = orbitPoints(b.data.id, simDays, 360);
     const attr = b.orbitLine.geometry.attributes.position;
     b.orbitAU.forEach((p, i) => {
       toDisplay(p, tmp);
@@ -381,6 +477,15 @@ for (const body of bodies) {
     $('chooser').appendChild(beltChip);
     belt.chip = beltChip;
   }
+}
+{
+  const cometChip = document.createElement('button');
+  cometChip.type = 'button';
+  cometChip.className = 'chip';
+  cometChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">☄️</span><span>שביטים</span>';
+  cometChip.addEventListener('click', () => userSelect(cometsInfo));
+  $('chooser').appendChild(cometChip);
+  cometsInfo.chip = cometChip;
 }
 {
   const chip = document.createElement('button');
@@ -476,6 +581,11 @@ function flyTo(body, duration = null) {
   let offset;
   if (!body) {
     offset = null;
+  } else if (body.isComet) {
+    // מהצד, כדי לראות את הזנב לכל אורכו
+    const out = body.group.position.clone().normalize();
+    const sideways = new THREE.Vector3().crossVectors(out, UP).normalize();
+    offset = sideways.multiplyScalar(16).addScaledVector(out, -4).add(new THREE.Vector3(0, 6, 0));
   } else if (body.isBelt) {
     // מבט מלמעלה ומבחוץ על החגורה
     const out = body.group.position.clone().normalize();
@@ -544,7 +654,7 @@ function updateViewOffset(dt) {
 
 // ---------- תוויות על המסך ----------
 // סדר עדיפות לתוויות: הכוכב שנבחר, השמש, ואז מהגדול לקטן. תווית שמתנגשת באחרת מוסתרת.
-const labelOrder = () => [...bodies].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
+const labelOrder = () => [...bodies, ...comets].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
 
 function updateLabels() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -599,7 +709,9 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y) > 6) return;
   const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObjects([...bodies.map((b) => b.mesh), ...bodies.flatMap((b) => b.moons.map((m) => m.mesh))])[0];
+  const hit = raycaster.intersectObjects([
+    ...bodies.map((b) => b.mesh), ...bodies.flatMap((b) => b.moons.map((m) => m.mesh)), ...comets.map((c) => c.nucleus),
+  ])[0];
   if (hit?.object.userData.moon) openMoon(hit.object.userData.moon);
   else if (hit) userSelect(hit.object.userData.body);
 });
@@ -937,12 +1049,17 @@ function markActive(body) {
     if (b.orbitLine) b.orbitLine.material.opacity = on ? 0.85 : 0.3;
   }
   belt.chip.classList.toggle('active', body === belt);
+  for (const c of comets) {
+    c.label.classList.toggle('active', c === body);
+    c.orbitLine.material.opacity = c === body ? 0.7 : 0.18;
+  }
+  cometsInfo.chip.classList.toggle('active', body === cometsInfo || !!body?.isComet);
 }
 
 const distFmt = new Intl.NumberFormat('he-IL', { maximumFractionDigits: 1 });
 function updateLiveDistance() {
   const el = $('panel-live');
-  if (!selected || selected.isSun || selected.isBelt || $('panel').hidden) {
+  if (!selected?.au || selected.isSun || selected.isBelt || $('panel').hidden) {
     el.hidden = true;
     return;
   }
@@ -967,6 +1084,7 @@ $('btn-scale').addEventListener('click', () => {
 });
 
 function showBody(body) {
+  if (body === cometsInfo) return showComets();
   const d = body.data;
   markActive(body);
   presenter.play('point', 2.4);
@@ -988,6 +1106,30 @@ function showBody(body) {
     $('panel-moons').replaceChildren(h, list);
     $('panel-moons').hidden = false;
   }
+}
+
+// הסבר כללי על שביטים: המצלמה טסה לשביט הקרוב ביותר לשמש, ובחלון יש כפתורים לכל שביט
+function showComets() {
+  const nearest = comets.reduce((a, b) => (b.au.length() < a.au.length() ? b : a));
+  const d = COMETS_INFO;
+  markActive(cometsInfo);
+  presenter.play('point', 2.4);
+  flyTo(nearest);
+  showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+  const h = document.createElement('h3');
+  h.textContent = '☄️ שביטים מפורסמים:';
+  const list = document.createElement('div');
+  list.className = 'moons-list';
+  for (const c of comets) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.textContent = c.data.short;
+    btn.addEventListener('click', () => userSelect(c));
+    list.appendChild(btn);
+  }
+  $('panel-moons').replaceChildren(h, list);
+  $('panel-moons').hidden = false;
 }
 
 // נועם מסביר על ירח, באותו כרטיס של המושגים
@@ -1077,6 +1219,7 @@ $('settings-test').addEventListener('click', () => {
 const tourSteps = [
   { intro: TOUR_INTRO },
   ...bodies.flatMap((body) => (body.data.id === 'mars' ? [{ body }, { body: belt }] : [{ body }])),
+  { body: cometsInfo },
   { intro: TOUR_OUTRO },
 ];
 let tour = null;
@@ -1182,6 +1325,7 @@ function frame() {
   updateBodies(dt);
   updateOrbits();
   updateAsteroids();
+  updateComets();
   updateLiveDistance();
   updateCamera(dt);
   controls.update();
@@ -1217,4 +1361,4 @@ window.addEventListener('resize', () => {
 presenter.play('wave', 3);
 
 // גישה נוחה לבדיקות מהקונסול
-window.solar = { bodies: bodyById, narrator, presenter };
+window.solar = { bodies: bodyById, narrator, presenter, comets, setDate: (iso) => (simDays = (Date.parse(iso) - J2000) / DAY_MS) };

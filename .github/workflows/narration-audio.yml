@@ -8,6 +8,7 @@ on:
       - js/data.js
       - js/glossary.js
       - js/moons.js
+      - js/comets.js
       - js/speech.js
       - tools/**
       - .github/workflows/narration-audio.yml
