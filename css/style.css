@@ -76,6 +76,29 @@ html, body {
 }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* ---------- הגדרות קול ---------- */
+.settings {
+  position: fixed;
+  top: 64px;
+  inset-inline-end: 16px;
+  z-index: 20;
+  width: min(300px, calc(100vw - 32px));
+  padding: 16px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+}
+.settings[hidden] { display: none; }
+.settings h2 { margin: 0 0 12px; font-size: 18px; }
+.setting { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+.setting > span:first-child { display: flex; justify-content: space-between; }
+.setting output { color: var(--accent); font-variant-numeric: tabular-nums; }
+.setting input { width: 100%; accent-color: var(--accent); }
+.setting-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.settings-actions { display: flex; gap: 8px; }
+
 /* ---------- זמן ---------- */
 .timebar {
   position: fixed;

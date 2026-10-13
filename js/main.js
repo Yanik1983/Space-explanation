@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED } from './data.js';
 import { heliocentric, orbitPoints, moonDirection, poleVector } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture } from './textures.js';
-import { Narrator, splitSentences } from './speech.js';
+import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './presenter.js';
 import { GLOSSARY, GLOSSARY_FORMS } from './glossary.js';
 
@@ -732,6 +732,59 @@ $('btn-voice').addEventListener('click', () => {
   $('btn-voice').title = voiceOn ? 'קריין פועל' : 'קריין כבוי';
   $('btn-voice').setAttribute('aria-pressed', String(voiceOn));
   if (!voiceOn) stopSpeaking();
+});
+
+// ---------- הגדרות קול ----------
+const settingsEl = $('settings');
+const percent = (v) => `${Math.round(v * 100)}%`;
+
+function showSettings() {
+  const { pitch, speed } = narrator.settings;
+  $('pitch').value = pitch;
+  $('rate').value = speed;
+  $('pitch-value').textContent = percent(pitch);
+  $('rate-value').textContent = percent(speed);
+}
+
+function toggleSettings(open = settingsEl.hidden) {
+  settingsEl.hidden = !open;
+  $('btn-settings').setAttribute('aria-expanded', String(open));
+  if (open) {
+    showSettings();
+    // מתחת לכפתור, גם כשהסרגל העליון נשבר לשתי שורות בטלפון
+    settingsEl.style.top = `${$('btn-settings').getBoundingClientRect().bottom + 8}px`;
+  }
+}
+
+$('btn-settings').addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleSettings();
+});
+// לחיצה מחוץ לחלון או Escape סוגרות אותו
+document.addEventListener('pointerdown', (e) => {
+  if (!settingsEl.hidden && !settingsEl.contains(e.target) && e.target !== $('btn-settings')) toggleSettings(false);
+});
+document.addEventListener('keydown', (e) => e.key === 'Escape' && !settingsEl.hidden && toggleSettings(false));
+
+$('pitch').addEventListener('input', () => {
+  narrator.setSettings({ pitch: +$('pitch').value });
+  showSettings();
+});
+$('rate').addEventListener('input', () => {
+  narrator.setSettings({ speed: +$('rate').value });
+  showSettings();
+});
+$('settings-reset').addEventListener('click', () => {
+  narrator.setSettings(DEFAULT_SETTINGS);
+  showSettings();
+});
+$('settings-test').addEventListener('click', () => {
+  if (tour) endTour();
+  stopSpeaking();
+  narrator.unlock();
+  setListening(false);
+  presenter.play('wave', 2);
+  narrator.speak('שלום! קוראים לי נועם, ואני אהיה המדריך שלכם.');
 });
 
 // ---------- סיור מודרך ----------
