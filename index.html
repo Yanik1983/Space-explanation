@@ -64,6 +64,35 @@
     <dl id="panel-facts" class="facts"></dl>
   </aside>
 
+  <aside id="term-card" class="panel term-card" hidden aria-live="polite">
+    <button id="term-close" class="close" type="button" aria-label="סגירה">✕</button>
+    <div id="term-view">
+      <div class="panel-head">
+        <span id="term-emoji" class="term-emoji" aria-hidden="true"></span>
+        <div>
+          <p class="subtitle">נועם מסביר מושג</p>
+          <h2 id="term-title"></h2>
+        </div>
+      </div>
+      <p id="term-text" class="narration"></p>
+      <div class="term-actions">
+        <button id="term-back" class="btn btn-primary" type="button">חזרה להסבר</button>
+        <button id="term-listen" class="btn" type="button">🔊 שוב</button>
+        <button id="term-all" class="btn" type="button">📖 כל המושגים</button>
+      </div>
+    </div>
+    <div id="term-list" hidden>
+      <div class="panel-head">
+        <span class="term-emoji" aria-hidden="true">📖</span>
+        <div>
+          <h2>מילון מושגים</h2>
+          <p class="subtitle">לוחצים על מושג, ונועם יסביר אותו</p>
+        </div>
+      </div>
+      <div id="term-grid" class="term-grid"></div>
+    </div>
+  </aside>
+
   <div id="tourbar" class="tourbar" hidden>
     <button id="tour-prev" class="btn" type="button">→ הקודם</button>
     <span id="tour-step"></span>

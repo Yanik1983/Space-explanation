@@ -5,6 +5,7 @@ import { heliocentric, orbitPoints, moonDirection, poleVector } from './orbits.j
 import { planetTexture, ringTexture, glowTexture } from './textures.js';
 import { Narrator, splitSentences } from './speech.js';
 import { Presenter } from './presenter.js';
+import { GLOSSARY, GLOSSARY_FORMS } from './glossary.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -185,6 +186,14 @@ for (const body of bodies) {
   $('chooser').appendChild(chip);
   body.chip = chip;
 }
+{
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'chip';
+  chip.innerHTML = '<span class="ball-emoji" aria-hidden="true">📖</span><span>מילון</span>';
+  chip.addEventListener('click', () => openGlossary());
+  $('chooser').appendChild(chip);
+}
 
 // ---------- זמן ----------
 let daysPerSecond = 5;
@@ -311,8 +320,9 @@ const viewShift = { x: 0, y: 0 };
 function updateViewOffset(dt) {
   const w = window.innerWidth, h = window.innerHeight;
   let tx = 0, ty = 0;
-  if (!$('panel').hidden) {
-    const rect = $('panel').getBoundingClientRect();
+  const box = infoBox();
+  if (box) {
+    const rect = box.getBoundingClientRect();
     if (w <= 720) ty = (h - rect.top) * 0.5;
     else tx = -(rect.width + 16) * 0.5;
   }
@@ -392,8 +402,8 @@ function placePresenter() {
       x = r.right - pw + 4;
       y = r.top - ph + 34;
     }
-  } else if (!$('panel').hidden) {
-    const r = $('panel').getBoundingClientRect();
+  } else if (infoBox()) {
+    const r = infoBox().getBoundingClientRect();
     if (phone) {
       x = w - pw - 4;
       y = r.top - ph + 18;
@@ -429,14 +439,16 @@ function showPanel({ title, subtitle = '', color = null, text, facts = [], funFa
   $('panel-subtitle').textContent = subtitle;
   $('panel-dot').style.display = color ? '' : 'none';
   $('panel-dot').style.background = color || '';
+  dismissTerm();
+  const used = new Set();
   $('panel-text').replaceChildren(
     ...splitSentences(text).flatMap((s) => {
       const span = document.createElement('span');
-      span.textContent = s;
+      span.append(...linkTerms(s, used));
       return [span, ' '];
     }),
   );
-  $('panel-fun').textContent = funFact;
+  $('panel-fun').replaceChildren(...linkTerms(funFact, used));
   $('panel-facts').replaceChildren(
     ...facts.flatMap(([k, v]) => {
       const dt = document.createElement('dt');
@@ -451,12 +463,18 @@ function showPanel({ title, subtitle = '', color = null, text, facts = [], funFa
 }
 
 let currentText = '';
+let currentSentence = 0;
+let lastOnEnd = null;
 
-function speakCurrent(onEnd) {
-  const spans = [...$('panel-text').querySelectorAll('span')];
+// מקריא את ההסבר שבחלון, מהמשפט from והלאה (כדי שאפשר יהיה להמשיך אחרי הסבר של מושג)
+function speakCurrent(onEnd, from = 0) {
+  const spans = [...$('panel-text').querySelectorAll(':scope > span')];
+  lastOnEnd = onEnd;
   setListening(true);
-  narrator.speak(currentText, {
-    onSentence: (i) => {
+  narrator.speak(splitSentences(currentText).slice(from).join(' '), {
+    onSentence: (k) => {
+      const i = k + from;
+      currentSentence = i;
       spans.forEach((s, j) => s.classList.toggle('speaking', i === j));
       // בחלון קטן (בטלפון) גוללים אל המשפט שמוקרא עכשיו
       spans[i]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -484,6 +502,159 @@ function setListening(on) {
 $('btn-listen').addEventListener('click', () => {
   if (listening) stopSpeaking();
   else speakCurrent();
+});
+
+// ---------- מילון מושגים ----------
+const isLetter = (ch) => !!ch && /[\u05D0-\u05EA]/.test(ch);
+
+// מחזיר את המשפט כרשימת קטעי טקסט וכפתורי מושגים. כל מושג מסומן רק פעם אחת (used)
+function linkTerms(text, used) {
+  const nodes = [];
+  let plain = '';
+  let i = 0;
+  while (i < text.length) {
+    let match = null;
+    if (!isLetter(text[i - 1])) {
+      // הצורה הארוכה ביותר שמתאימה כאן (כך "כוכב לכת" לא נקרא בטעות כ"כוכב")
+      match = GLOSSARY_FORMS.find(({ form, term }) =>
+        text.startsWith(form, i) && !isLetter(text[i + form.length]) &&
+        !(term.notBefore || []).some((w) => text.startsWith(' ' + w, i + form.length)));
+    }
+    if (!match) {
+      plain += text[i++];
+      continue;
+    }
+    if (used.has(match.term.id)) {
+      plain += match.form;
+      i += match.form.length;
+      continue;
+    }
+    if (plain) nodes.push(plain);
+    plain = '';
+    used.add(match.term.id);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'term';
+    btn.textContent = match.form;
+    btn.title = 'מה זה ' + match.term.title + '?';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTerm(match.term);
+    });
+    nodes.push(btn);
+    i += match.form.length;
+  }
+  if (plain) nodes.push(plain);
+  return nodes;
+}
+
+const infoBox = () => (!$('term-card').hidden ? $('term-card') : !$('panel').hidden ? $('panel') : null);
+
+let termState = null; // מה הושהה כשנפתח מושג, כדי לחזור אליו אחר כך
+let currentTerm = null;
+let termSpeaking = false;
+
+function captureForTerm() {
+  if (termState) return;
+  termState = {
+    resume: listening && !$('panel').hidden ? { index: currentSentence, onEnd: lastOnEnd } : null,
+    tourWaiting: !!(tour && !listening),
+  };
+  if (tour) clearTimeout(tour.timer);
+  stopSpeaking();
+}
+
+function openTerm(term, from = 'panel') {
+  captureForTerm();
+  termState.from = from;
+  currentTerm = term;
+  $('term-card').hidden = false;
+  document.body.classList.add('term-open');
+  $('term-view').hidden = false;
+  $('term-list').hidden = true;
+  $('term-emoji').textContent = term.emoji;
+  $('term-title').textContent = term.title;
+  $('term-text').replaceChildren(
+    ...splitSentences(term.text).flatMap((s) => {
+      const span = document.createElement('span');
+      span.textContent = s;
+      return [span, ' '];
+    }),
+  );
+  $('term-back').textContent = from === 'list' ? 'חזרה למילון' : $('panel').hidden ? 'סגירה' : 'חזרה להסבר';
+  $('term-card').scrollTop = 0;
+  presenter.play('open', 2.4);
+  if (voiceOn) speakTerm();
+  else narrator.stop();
+}
+
+function speakTerm() {
+  const spans = [...$('term-text').querySelectorAll('span')];
+  termSpeaking = true;
+  $('term-listen').textContent = '⏹ עצירה';
+  narrator.speak(currentTerm.text, {
+    onSentence: (i) => spans.forEach((s, j) => s.classList.toggle('speaking', i === j)),
+    onEnd: () => {
+      spans.forEach((s) => s.classList.remove('speaking'));
+      termSpeaking = false;
+      $('term-listen').textContent = '🔊 שוב';
+    },
+  });
+}
+
+function openGlossary() {
+  captureForTerm();
+  termState.from = 'list';
+  narrator.stop();
+  termSpeaking = false;
+  $('term-card').hidden = false;
+  document.body.classList.add('term-open');
+  $('term-view').hidden = true;
+  $('term-list').hidden = false;
+  $('term-card').scrollTop = 0;
+  presenter.play('open', 2);
+}
+
+for (const term of GLOSSARY) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn';
+  btn.textContent = `${term.emoji} ${term.title}`;
+  btn.addEventListener('click', () => openTerm(term, 'list'));
+  $('term-grid').appendChild(btn);
+}
+
+// סוגר את כרטיס המושג וממשיך את מה שהיה לפניו (ההקראה או הסיור)
+function closeTerm() {
+  const st = termState;
+  dismissTerm();
+  if (!st) return;
+  if (st.resume && voiceOn) speakCurrent(st.resume.onEnd, st.resume.index);
+  else if (st.tourWaiting && tour && tour.index < tourSteps.length - 1) {
+    tour.timer = setTimeout(() => goToStep(tour.index + 1), 1500);
+  }
+}
+
+// סוגר את הכרטיס בלי להמשיך (למשל כשעוברים לכוכב לכת אחר)
+function dismissTerm() {
+  if ($('term-card').hidden) return;
+  if (termSpeaking) narrator.stop();
+  termSpeaking = false;
+  $('term-card').hidden = true;
+  document.body.classList.remove('term-open');
+  termState = null;
+}
+
+$('term-close').addEventListener('click', closeTerm);
+$('term-back').addEventListener('click', () => (termState?.from === 'list' ? openGlossary() : closeTerm()));
+$('term-all').addEventListener('click', openGlossary);
+$('term-listen').addEventListener('click', () => {
+  if (termSpeaking) {
+    narrator.stop();
+    termSpeaking = false;
+    $('term-listen').textContent = '🔊 שוב';
+    $('term-text').querySelectorAll('span').forEach((s) => s.classList.remove('speaking'));
+  } else speakTerm();
 });
 
 function closePanel() {

@@ -151,6 +151,7 @@ html, body {
 }
 .chip:hover { background: var(--surface-strong); }
 .chip.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.chip .ball-emoji { font-size: 20px; line-height: 22px; }
 .chip .ball {
   width: 22px;
   height: 22px;
@@ -220,6 +221,27 @@ html, body {
 .facts:empty { display: none; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; }
+
+/* ---------- מושגים ---------- */
+.term {
+  font: inherit;
+  color: #ffd27a;
+  background: none;
+  border: 0;
+  border-bottom: 2px dotted rgba(255, 181, 46, 0.8);
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 0;
+}
+.term:hover, .term:focus-visible { background: var(--highlight); outline: none; }
+body.term-open #panel { visibility: hidden; }
+.term-card { z-index: 3; border-color: rgba(255, 181, 46, 0.55); background: var(--surface-strong); }
+.term-emoji { font-size: 34px; line-height: 1; }
+.term-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.term-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-top: 14px; }
+.term-grid .btn { border-radius: 12px; text-align: start; white-space: normal; padding: 8px 10px; }
+#term-list[hidden], #term-view[hidden] { display: none; }
 
 /* ---------- סיור ---------- */
 .tourbar {

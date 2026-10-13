@@ -6,6 +6,7 @@ on:
   push:
     paths:
       - js/data.js
+      - js/glossary.js
       - js/speech.js
       - tools/**
       - .github/workflows/narration-audio.yml
