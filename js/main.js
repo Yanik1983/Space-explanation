@@ -312,75 +312,73 @@ function updateComets() {
 // ---------- מערכת השמש טסה בחלל ----------
 // הכיוון שבו השמש נעה סביב מרכז הגלקסיה (לכיוון קבוצת הכוכבים ברבור, עלייה ישרה 318°, נטייה +48°).
 // הוא מוטה בערך 60 מעלות למישור שבו כוכבי הלכת מקיפים את השמש.
+// השמש טסה קדימה ומשאירה זנב זוהר, וכל כוכב לכת מצייר מאחוריה שביל זוהר בצורת ספירלה.
 const GALAXY_DIR = poleVector([318, 48.3]);
-const GALAXY_SPEED = 0.08; // יחידות תצוגה ליום – מואט מאוד לעומת המציאות, כדי שהשבילים ייכנסו במסך
-const TRAIL_DAYS = 1100; // אורך השביל: בערך שלוש שנים אחורה
-const TRAIL_POINTS = 420;
+const GALAXY_SPEED = 0.09; // יחידות תצוגה ליום – מואט מאוד לעומת המציאות, כדי שהספירלות ייכנסו במסך
+const TRAIL_DAYS = 2200; // אורך השביל: בערך שש שנים אחורה
+const TRAIL_POINTS = 600;
+const MOTION_MIN_SPEED = 25; // במצב הזה הזמן רץ לפחות 25 ימים בשנייה, כדי לראות את כוכבי הלכת מסתובבים
 const galaxyInfo = { data: GALAXY_MOTION, isGalaxy: true, moons: [], group: new THREE.Object3D() };
-let motionMix = 0, motionTarget = 0;
-let trails = [], dust = null, streaks = null, motionArrow = null;
-let wind = 0; // כמה "רוח" עברה – מניע את הפסים והאבק שזורמים לאחור
+let motionMix = 0, motionTarget = 0, trailGrow = 0, speedBoostShown = false;
+let trails = [], dust = null, motionArrow = null, sunTail = null;
+
+function softDot() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
 
 function initGalaxyMotion() {
-  const line = (color) => {
+  const dot = softDot();
+  // שביל זוהר: קו דק באמצע ו"הילה" של נקודות רכות סביבו, שדועכים לאורך השביל
+  const makeTrail = (color, isSun) => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((TRAIL_POINTS + 1) * 3), 3));
     geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array((TRAIL_POINTS + 1) * 3), 3));
-    const l = new THREE.Line(geo, new THREE.LineBasicMaterial({
-      vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    l.frustumCulled = false;
-    l.visible = false;
-    scene.add(l);
-    // צבע שדועך לאורך השביל
     const col = geo.attributes.color, c = new THREE.Color(color);
     for (let k = 0; k <= TRAIL_POINTS; k++) {
-      const f = (1 - k / TRAIL_POINTS) ** 1.3;
+      const f = (1 - k / TRAIL_POINTS) ** 1.2;
       col.setXYZ(k, c.r * f, c.g * f, c.b * f);
     }
-    return l;
+    const additive = { vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false };
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial(additive));
+    const glow = new THREE.Points(geo, new THREE.PointsMaterial({ ...additive, map: dot, size: isSun ? 3 : 1.8, sizeAttenuation: true }));
+    for (const o of [line, glow]) {
+      o.frustumCulled = false;
+      o.visible = false;
+      scene.add(o);
+    }
+    return { line, glow, geo };
   };
-  trails = [...bodies.filter((b) => !b.isSun), sun].map((b) => ({ body: b, line: line(b.isSun ? '#ffc34d' : b.data.color) }));
+  trails = [...bodies.filter((b) => !b.isSun), sun].map((b) => ({ body: b, ...makeTrail(b.isSun ? '#ffd27a' : b.data.color, b.isSun) }));
 
-  // אבק חלל שזורם לאחור, כדי להרגיש את התנועה
-  const N = 1400, pos = new Float32Array(N * 3);
+  // הזנב הזוהר של השמש
+  sunTail = tailMesh('#ffb347', 1.2);
+  sunTail.visible = false;
+
+  // אבק דק שעומד במקום בחלל – מערכת השמש טסה דרכו
+  const N = 900, pos = new Float32Array(N * 3);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
   const up = new THREE.Vector3().crossVectors(side, GALAXY_DIR).normalize();
-  dust = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.1, color: '#d6e0ff', transparent: true, opacity: 0, depthWrite: false }));
+  dust = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 0.9, map: dot, color: '#c8d4ff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
   dust.frustumCulled = false;
   dust.visible = false;
   dust.userData.seeds = Array.from({ length: N }, () => {
-    const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * 230;
-    return { perp: side.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r), phase: Math.random() * 600 };
+    const a = Math.random() * Math.PI * 2, r = 15 + Math.random() * 240;
+    return { perp: side.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r), phase: Math.random() * 700 };
   });
   scene.add(dust);
-
-  // פסי אור שחולפים לאחור, כמו כוכבים שעפים ליד חלון של חללית
-  const S = 520;
-  const sgeo = new THREE.BufferGeometry();
-  sgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(S * 6), 3));
-  const scol = new Float32Array(S * 6);
-  for (let i = 0; i < S; i++) {
-    const k = 0.55 + Math.random() * 0.45;
-    scol.set([k * 0.75, k * 0.85, k, 0, 0, 0], i * 6); // ראש בהיר, זנב שדועך
-  }
-  sgeo.setAttribute('color', new THREE.BufferAttribute(scol, 3));
-  streaks = new THREE.LineSegments(sgeo, new THREE.LineBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
-  }));
-  streaks.frustumCulled = false;
-  streaks.visible = false;
-  streaks.userData.seeds = Array.from({ length: S }, () => {
-    const a = Math.random() * Math.PI * 2, r = 12 + Math.random() ** 0.7 * 260;
-    return {
-      perp: side.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r),
-      phase: Math.random() * 700,
-      len: 6 + Math.random() * 14,
-    };
-  });
-  scene.add(streaks);
 
   // חץ שמראה לאן מערכת השמש טסה
   motionArrow = new THREE.ArrowHelper(GALAXY_DIR, GALAXY_DIR.clone().multiplyScalar(18), 40, 0x9db8ff, 9, 5);
@@ -391,26 +389,50 @@ function initGalaxyMotion() {
   galaxyInfo.label.textContent = 'כיוון התנועה של מערכת השמש';
   galaxyInfo.label.style.display = 'none';
   $('labels').appendChild(galaxyInfo.label);
-  galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-40);
+  galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-70);
 }
 
 const motionTmp = new THREE.Vector3();
+const ORIGIN = new THREE.Vector3();
+const BACKWARD = GALAXY_DIR.clone().negate();
 function updateGalaxyMotion(dt) {
   if (motionMix !== motionTarget) {
     motionMix = motionTarget > motionMix ? Math.min(1, motionMix + dt / 1.5) : Math.max(0, motionMix - dt / 1.5);
   }
+  // בכניסה למצב, השבילים "נמתחים" מאחורי השמש במשך כמה שניות
+  trailGrow = motionTarget ? Math.min(1, trailGrow + dt / 6) : motionMix > 0 ? trailGrow : 0;
   const on = motionMix > 0.001;
-  for (const t of trails) t.line.visible = on;
-  dust.visible = streaks.visible = motionArrow.visible = on;
+  for (const t of trails) t.line.visible = t.glow.visible = on;
+  dust.visible = motionArrow.visible = on;
+
+  // פחות עומס: קווי המסלולים, האסטרואידים והשביטים נעלמים בהדרגה
+  for (const b of bodies) if (b.orbitLine && b !== selected) b.orbitLine.material.opacity = 0.3 * (1 - motionMix);
+  asteroidPoints.material.opacity = 1 - motionMix;
+  asteroidPoints.visible = motionMix < 0.99;
+  for (const c of comets) {
+    c.group.visible = c.orbitLine.visible = motionMix < 0.5;
+    if (motionMix >= 0.5) c.ion.visible = c.dust.visible = false;
+    if (motionMix > 0.3) c.label.style.display = 'none';
+  }
+
+  // במצב הזה הזמן רץ מהר יותר – מעדכנים גם את התווית
+  const boosted = playing && motionMix > 0 && MOTION_MIN_SPEED * motionMix > daysPerSecond;
+  if (boosted !== speedBoostShown) {
+    speedBoostShown = boosted;
+    if (boosted) $('speed-label').textContent = `כל שנייה = ${MOTION_MIN_SPEED} ימים`;
+    else updateSpeedLabel();
+  }
   if (!on) {
+    sunTail.visible = false;
     galaxyInfo.label.style.display = 'none';
     return;
   }
+  const days = TRAIL_DAYS * (0.04 + 0.96 * smoothstep01(trailGrow));
   // כל נקודה בשביל: המקום של כוכב הלכת לפני tau ימים, פחות הדרך שהשמש עברה מאז
   for (const t of trails) {
-    const attr = t.line.geometry.attributes.position;
+    const attr = t.geo.attributes.position;
     for (let k = 0; k <= TRAIL_POINTS; k++) {
-      const tau = (k / TRAIL_POINTS) * TRAIL_DAYS;
+      const tau = (k / TRAIL_POINTS) * days;
       if (t.body.isSun) motionTmp.set(0, 0, 0);
       else toDisplay(heliocentric(t.body.data.id, simDays - tau, motionTmp), motionTmp);
       motionTmp.addScaledVector(GALAXY_DIR, -GALAXY_SPEED * tau);
@@ -418,28 +440,22 @@ function updateGalaxyMotion(dt) {
     }
     attr.needsUpdate = true;
     t.line.material.opacity = motionMix;
+    t.glow.material.opacity = motionMix * 0.8;
   }
-  // הרוח: מהירה יותר כשמאיצים את הזמן, ועוצרת כשהזמן עוצר
-  if (playing) wind += dt * (45 + Math.min(daysPerSecond, 60) * 1.5);
-  const L = 700;
+  setTail(sunTail, ORIGIN, BACKWARD, GALAXY_SPEED * days * 0.8, 9);
+  sunTail.material.uniforms.strength.value = 1.2 * motionMix;
+
+  // האבק עומד במקום בחלל, ולכן הוא זז לאחור בדיוק במהירות שבה השמש טסה קדימה
+  const L = 700, flow = simDays * GALAXY_SPEED;
   const pa = dust.geometry.attributes.position;
   dust.userData.seeds.forEach((sd, i) => {
-    const s = (((sd.phase + wind * 0.6) % L) + L) % L;
+    const s = (((sd.phase + flow) % L) + L) % L;
     motionTmp.copy(sd.perp).addScaledVector(GALAXY_DIR, L / 2 - s);
     pa.setXYZ(i, motionTmp.x, motionTmp.y, motionTmp.z);
   });
   pa.needsUpdate = true;
-  dust.material.opacity = motionMix * 0.85;
-  const sa = streaks.geometry.attributes.position;
-  streaks.userData.seeds.forEach((sd, i) => {
-    const s = (((sd.phase + wind) % L) + L) % L;
-    motionTmp.copy(sd.perp).addScaledVector(GALAXY_DIR, L / 2 - s);
-    sa.setXYZ(i * 2, motionTmp.x, motionTmp.y, motionTmp.z);
-    motionTmp.addScaledVector(GALAXY_DIR, sd.len);
-    sa.setXYZ(i * 2 + 1, motionTmp.x, motionTmp.y, motionTmp.z);
-  });
-  sa.needsUpdate = true;
-  streaks.material.opacity = motionMix;
+  dust.material.opacity = motionMix * 0.55;
+
   motionArrow.line.material.transparent = motionArrow.cone.material.transparent = true;
   motionArrow.line.material.opacity = motionArrow.cone.material.opacity = motionMix;
   // תווית ליד קצה החץ
@@ -451,6 +467,7 @@ function updateGalaxyMotion(dt) {
       `translate(-50%, 0) translate(${(motionTmp.x * 0.5 + 0.5) * innerWidth}px, ${(-motionTmp.y * 0.5 + 0.5) * innerHeight}px)`;
   }
 }
+const smoothstep01 = (t) => t * t * (3 - 2 * t);
 initGalaxyMotion();
 
 function createBody(data, isSun) {
@@ -735,7 +752,7 @@ function flyTo(body, duration = null) {
   } else if (body.isGalaxy) {
     // מבט מהצד על השבילים: מאונך לכיוון התנועה
     const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
-    offset = side.multiplyScalar(-190).add(new THREE.Vector3(0, 55, 0)).multiplyScalar(camera.aspect < 1 ? 1.8 : 1);
+    offset = side.multiplyScalar(-250).add(new THREE.Vector3(0, 30, 0)).multiplyScalar(camera.aspect < 1 ? 1.8 : 1);
   } else if (body.isComet) {
     // מהצד, כדי לראות את הזנב לכל אורכו
     const out = body.group.position.clone().normalize();
@@ -809,7 +826,7 @@ function updateViewOffset(dt) {
 
 // ---------- תוויות על המסך ----------
 // סדר עדיפות לתוויות: הכוכב שנבחר, השמש, ואז מהגדול לקטן. תווית שמתנגשת באחרת מוסתרת.
-const labelOrder = () => [...bodies, ...comets].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
+const labelOrder = () => [...bodies, ...(motionMix > 0.3 ? [] : comets)].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
 
 function updateLabels() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -1488,7 +1505,7 @@ let lastDateText = '';
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
-  if (playing) simDays += daysPerSecond * dt;
+  if (playing) simDays += Math.max(daysPerSecond, MOTION_MIN_SPEED * motionMix) * dt;
   if (scaleT !== scaleTarget) {
     scaleT = scaleTarget > scaleT ? Math.min(1, scaleT + dt / 2.8) : Math.max(0, scaleT - dt / 2.8);
     scaleMix = scaleT * scaleT * (3 - 2 * scaleT);
