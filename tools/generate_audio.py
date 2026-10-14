@@ -27,6 +27,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,32 @@ PHONIKUD_SPEED = 1.0  # מעל 1 = מהר יותר
 # איטי על מעבד רגיל (פי 40–50 מאורך הדיבור), ולכן ב־GitHub Actions מחלקים לכמה ריצות במקביל (--shard).
 VOXCPM_REF = ROOT / "tools" / "voices" / "noam.wav"
 VOXCPM_SEED = 1
+# פיסוק: משפט ארוך נחתך בפסיקים, כל חלק נוצר לחוד, והחלקים מחוברים בהפסקה קצרה וקבועה.
+# כך המודל לא "בולע" פסיקים. חלק קצר מ־MIN_CHUNK תווים נשאר מחובר לשכן שלו, כדי שלא יישמע קטוע.
+COMMA_PAUSE = 0.18  # שניות
+END_PAUSE = 0.25  # שניות של שקט בסוף כל משפט
+MIN_CHUNK = 12
+
+
+def comma_chunks(sentence):
+    parts = [p.strip() for p in re.split(r"(?<=,)\s+", sentence) if p.strip()]
+    chunks = []
+    for part in parts:
+        if chunks and (len(part) < MIN_CHUNK or len(chunks[-1]) < MIN_CHUNK):
+            chunks[-1] += " " + part
+        else:
+            chunks.append(part)
+    return chunks
+
+
+def trim_silence(wav, sr, level=0.02, margin=0.03):
+    """מוריד שקט מההתחלה ומהסוף, כדי שההפסקות יהיו בדיוק באורך שקבענו."""
+    import numpy as np
+    loud = np.flatnonzero(np.abs(wav) > level * np.abs(wav).max())
+    if not len(loud):
+        return wav
+    pad = int(sr * margin)
+    return wav[max(0, loud[0] - pad):loud[-1] + pad]
 
 
 def sentences():
@@ -133,7 +160,7 @@ class VoxCPMEngine:
         meta = json.loads(VOXCPM_REF.with_suffix(".json").read_text(encoding="utf-8"))
         self.ref_text = meta["text"]
         ref_hash = hashlib.sha1(VOXCPM_REF.read_bytes()).hexdigest()[:8]
-        self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}"
+        self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|punct{COMMA_PAUSE}-{END_PAUSE}-{MIN_CHUNK}"
         self.model = None  # נטען רק כשבאמת צריך ליצור קול (לא ב־--finalize)
 
     async def save(self, sentence, path):
@@ -143,11 +170,19 @@ class VoxCPMEngine:
             from voxcpm import VoxCPM
             self.model = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False,
                                                 optimize=False, device="cpu")
-        torch.manual_seed(VOXCPM_SEED)
-        wav = self.model.generate(text=sentence, prompt_wav_path=str(VOXCPM_REF), prompt_text=self.ref_text,
-                                  reference_wav_path=str(VOXCPM_REF), cfg_value=2.0, inference_timesteps=10)
+        import numpy as np
+        sr = self.model.tts_model.sample_rate
+        parts = []
+        for i, chunk in enumerate(comma_chunks(sentence)):
+            torch.manual_seed(VOXCPM_SEED)
+            wav = self.model.generate(text=chunk, prompt_wav_path=str(VOXCPM_REF), prompt_text=self.ref_text,
+                                      reference_wav_path=str(VOXCPM_REF), cfg_value=2.0, inference_timesteps=10)
+            if i:
+                parts.append(np.zeros(int(sr * COMMA_PAUSE), dtype=np.float32))
+            parts.append(trim_silence(np.asarray(wav, dtype=np.float32), sr))
+        parts.append(np.zeros(int(sr * END_PAUSE), dtype=np.float32))
         with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
-            sf.write(tmp.name, wav, self.model.tts_model.sample_rate)
+            sf.write(tmp.name, np.concatenate(parts), sr)
             subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", tmp.name,
                             "-ac", "1", "-b:a", "80k", "-f", "mp3", str(path)], check=True)
 
