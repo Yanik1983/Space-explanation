@@ -33,6 +33,8 @@ export class Narrator {
     this.processed = new Map(); // קובץ + הגדרות -> AudioBuffer אחרי שינוי טון ומהירות
     this.pulseTimer = null;
     this.settings = loadSettings();
+    this.status = null; // מה השמיע את ההקראה האחרונה: 'files' / 'browser' / 'none' (מוצג בהגדרות)
+    this.lastError = null;
     this.ready = this.loadFiles();
     if (this.supported) {
       this.pickVoice();
@@ -104,8 +106,9 @@ export class Narrator {
     this.stop();
     const token = ++this.token;
     const sentences = splitSentences(text);
-    // אם חסר קובץ לחלק מהמשפטים, מקריאים הכול בקול הדפדפן כדי שלא יתחלף קול באמצע
-    const useFiles = sentences.every((s) => this.files[s]) && this.audioContext();
+    // יוצרים את מנוע השמע כבר עכשיו, בתוך הלחיצה, כי דפדפנים בטלפון חוסמים ניגון שמתחיל בלי לחיצה
+    const ctx = this.audioContext();
+    let useFiles = false;
 
     let i = 0;
     const next = () => {
@@ -124,11 +127,22 @@ export class Narrator {
       if (useFiles) this.playFile(sentences[index], token, start, done);
       else this.speakSentence(sentences[index], token, start, done);
     };
-    next();
+    // מחכים לרשימת הקבצים: בטלפון היא מגיעה לפעמים אחרי הלחיצה הראשונה
+    this.ready.then(() => {
+      if (token !== this.token) return;
+      // אם חסר קובץ לחלק מהמשפטים, מקריאים הכול בקול הדפדפן כדי שלא יתחלף קול באמצע
+      useFiles = !!ctx && sentences.every((s) => this.files[s]);
+      this.status = useFiles ? 'files' : this.voice ? 'browser' : 'none';
+      next();
+    });
   }
 
   playFile(sentence, token, start, done) {
-    const fallback = () => token === this.token && this.speakSentence(sentence, token, start, done);
+    const fallback = (e) => {
+      this.status = 'browser';
+      this.lastError = `${e?.name || 'Error'}: ${e?.message || e}`;
+      if (token === this.token) this.speakSentence(sentence, token, start, done);
+    };
     this.buffer(this.files[sentence])
       .then((buffer) => {
         if (token !== this.token) return;
