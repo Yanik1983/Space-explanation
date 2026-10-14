@@ -1,0 +1,6 @@
+{
+  "name": "Noam (B1)",
+  "engine": "VoxCPM2 (openbmb/VoxCPM2), Apache-2.0",
+  "how_made": "voice design: '(10-year-old boy, child's voice, friendly and excited)' + text below, torch seed 1, cfg 2.0, 10 timesteps",
+  "text": "שלום! קוראים לי נועם, ואני אהיה המדריך שלכם."
+}
