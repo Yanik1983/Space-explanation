@@ -1359,6 +1359,10 @@ function showSettings() {
   $('rate').value = speed;
   $('pitch-value').textContent = percent(pitch);
   $('rate-value').textContent = percent(speed);
+  const voice = narrator.hasRecordings ? 'הקול של נועם (קבצים מוקלטים)' : 'קול הדפדפן';
+  const last = { files: 'הקול של נועם', browser: 'קול הדפדפן', none: 'בלי קול' }[narrator.status];
+  $('voice-status').textContent =
+    `קול זמין: ${voice}` + (last ? ` · הושמע לאחרונה: ${last}` : '') + (narrator.lastError ? ` · שגיאה: ${narrator.lastError}` : '');
 }
 
 function toggleSettings(open = settingsEl.hidden) {
