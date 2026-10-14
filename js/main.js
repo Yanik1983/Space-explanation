@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT } from './data.js';
+import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION } from './data.js';
 import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
@@ -309,6 +309,167 @@ function updateComets() {
   }
 }
 
+// ---------- מערכת השמש טסה בחלל ----------
+// הכיוון שבו השמש נעה סביב מרכז הגלקסיה (לכיוון קבוצת הכוכבים ברבור, עלייה ישרה 318°, נטייה +48°).
+// הוא מוטה בערך 60 מעלות למישור שבו כוכבי הלכת מקיפים את השמש.
+// השמש טסה קדימה ומשאירה זנב זוהר, וכל כוכב לכת מצייר מאחוריה שביל זוהר בצורת ספירלה.
+const GALAXY_DIR = poleVector([318, 48.3]);
+const GALAXY_SPEED = 0.09; // יחידות תצוגה ליום – מואט מאוד לעומת המציאות, כדי שהספירלות ייכנסו במסך
+const TRAIL_DAYS = 2200; // אורך השביל: בערך שש שנים אחורה
+const TRAIL_POINTS = 600;
+const MOTION_MIN_SPEED = 25; // במצב הזה הזמן רץ לפחות 25 ימים בשנייה, כדי לראות את כוכבי הלכת מסתובבים
+const galaxyInfo = { data: GALAXY_MOTION, isGalaxy: true, moons: [], group: new THREE.Object3D() };
+let motionMix = 0, motionTarget = 0, trailGrow = 0, speedBoostShown = false;
+let trails = [], dust = null, motionArrow = null, sunTail = null;
+
+function softDot() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+
+function initGalaxyMotion() {
+  const dot = softDot();
+  // שביל זוהר: קו דק באמצע ו"הילה" של נקודות רכות סביבו, שדועכים לאורך השביל
+  const makeTrail = (color, isSun) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((TRAIL_POINTS + 1) * 3), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array((TRAIL_POINTS + 1) * 3), 3));
+    const col = geo.attributes.color, c = new THREE.Color(color);
+    for (let k = 0; k <= TRAIL_POINTS; k++) {
+      const f = (1 - k / TRAIL_POINTS) ** 1.2;
+      col.setXYZ(k, c.r * f, c.g * f, c.b * f);
+    }
+    const additive = { vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false };
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial(additive));
+    const glow = new THREE.Points(geo, new THREE.PointsMaterial({ ...additive, map: dot, size: isSun ? 3 : 1.8, sizeAttenuation: true }));
+    for (const o of [line, glow]) {
+      o.frustumCulled = false;
+      o.visible = false;
+      scene.add(o);
+    }
+    return { line, glow, geo };
+  };
+  trails = [...bodies.filter((b) => !b.isSun), sun].map((b) => ({ body: b, ...makeTrail(b.isSun ? '#ffd27a' : b.data.color, b.isSun) }));
+
+  // הזנב הזוהר של השמש
+  sunTail = tailMesh('#ffb347', 1.2);
+  sunTail.visible = false;
+
+  // אבק דק שעומד במקום בחלל – מערכת השמש טסה דרכו
+  const N = 900, pos = new Float32Array(N * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
+  const up = new THREE.Vector3().crossVectors(side, GALAXY_DIR).normalize();
+  dust = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 0.9, map: dot, color: '#c8d4ff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  dust.frustumCulled = false;
+  dust.visible = false;
+  dust.userData.seeds = Array.from({ length: N }, () => {
+    const a = Math.random() * Math.PI * 2, r = 15 + Math.random() * 240;
+    return { perp: side.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r), phase: Math.random() * 700 };
+  });
+  scene.add(dust);
+
+  // חץ שמראה לאן מערכת השמש טסה
+  motionArrow = new THREE.ArrowHelper(GALAXY_DIR, GALAXY_DIR.clone().multiplyScalar(18), 40, 0x9db8ff, 9, 5);
+  motionArrow.visible = false;
+  scene.add(motionArrow);
+  galaxyInfo.label = document.createElement('div');
+  galaxyInfo.label.className = 'label motion-label';
+  galaxyInfo.label.textContent = 'כיוון התנועה של מערכת השמש';
+  galaxyInfo.label.style.display = 'none';
+  $('labels').appendChild(galaxyInfo.label);
+  galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-70);
+}
+
+const motionTmp = new THREE.Vector3();
+const ORIGIN = new THREE.Vector3();
+const BACKWARD = GALAXY_DIR.clone().negate();
+function updateGalaxyMotion(dt) {
+  if (motionMix !== motionTarget) {
+    motionMix = motionTarget > motionMix ? Math.min(1, motionMix + dt / 1.5) : Math.max(0, motionMix - dt / 1.5);
+  }
+  // בכניסה למצב, השבילים "נמתחים" מאחורי השמש במשך כמה שניות
+  trailGrow = motionTarget ? Math.min(1, trailGrow + dt / 6) : motionMix > 0 ? trailGrow : 0;
+  const on = motionMix > 0.001;
+  for (const t of trails) t.line.visible = t.glow.visible = on;
+  dust.visible = motionArrow.visible = on;
+
+  // פחות עומס: קווי המסלולים, האסטרואידים והשביטים נעלמים בהדרגה
+  for (const b of bodies) if (b.orbitLine && b !== selected) b.orbitLine.material.opacity = 0.3 * (1 - motionMix);
+  asteroidPoints.material.opacity = 1 - motionMix;
+  asteroidPoints.visible = motionMix < 0.99;
+  for (const c of comets) {
+    c.group.visible = c.orbitLine.visible = motionMix < 0.5;
+    if (motionMix >= 0.5) c.ion.visible = c.dust.visible = false;
+    if (motionMix > 0.3) c.label.style.display = 'none';
+  }
+
+  // במצב הזה הזמן רץ מהר יותר – מעדכנים גם את התווית
+  const boosted = playing && motionMix > 0 && MOTION_MIN_SPEED * motionMix > daysPerSecond;
+  if (boosted !== speedBoostShown) {
+    speedBoostShown = boosted;
+    if (boosted) $('speed-label').textContent = `כל שנייה = ${MOTION_MIN_SPEED} ימים`;
+    else updateSpeedLabel();
+  }
+  if (!on) {
+    sunTail.visible = false;
+    galaxyInfo.label.style.display = 'none';
+    return;
+  }
+  const days = TRAIL_DAYS * (0.04 + 0.96 * smoothstep01(trailGrow));
+  // כל נקודה בשביל: המקום של כוכב הלכת לפני tau ימים, פחות הדרך שהשמש עברה מאז
+  for (const t of trails) {
+    const attr = t.geo.attributes.position;
+    for (let k = 0; k <= TRAIL_POINTS; k++) {
+      const tau = (k / TRAIL_POINTS) * days;
+      if (t.body.isSun) motionTmp.set(0, 0, 0);
+      else toDisplay(heliocentric(t.body.data.id, simDays - tau, motionTmp), motionTmp);
+      motionTmp.addScaledVector(GALAXY_DIR, -GALAXY_SPEED * tau);
+      attr.setXYZ(k, motionTmp.x, motionTmp.y, motionTmp.z);
+    }
+    attr.needsUpdate = true;
+    t.line.material.opacity = motionMix;
+    t.glow.material.opacity = motionMix * 0.8;
+  }
+  setTail(sunTail, ORIGIN, BACKWARD, GALAXY_SPEED * days * 0.8, 9);
+  sunTail.material.uniforms.strength.value = 1.2 * motionMix;
+
+  // האבק עומד במקום בחלל, ולכן הוא זז לאחור בדיוק במהירות שבה השמש טסה קדימה
+  const L = 700, flow = simDays * GALAXY_SPEED;
+  const pa = dust.geometry.attributes.position;
+  dust.userData.seeds.forEach((sd, i) => {
+    const s = (((sd.phase + flow) % L) + L) % L;
+    motionTmp.copy(sd.perp).addScaledVector(GALAXY_DIR, L / 2 - s);
+    pa.setXYZ(i, motionTmp.x, motionTmp.y, motionTmp.z);
+  });
+  pa.needsUpdate = true;
+  dust.material.opacity = motionMix * 0.55;
+
+  motionArrow.line.material.transparent = motionArrow.cone.material.transparent = true;
+  motionArrow.line.material.opacity = motionArrow.cone.material.opacity = motionMix;
+  // תווית ליד קצה החץ
+  motionTmp.copy(GALAXY_DIR).multiplyScalar(64).project(camera);
+  const show = motionTmp.z < 1 && motionMix > 0.5;
+  galaxyInfo.label.style.display = show ? '' : 'none';
+  if (show) {
+    galaxyInfo.label.style.transform =
+      `translate(-50%, 0) translate(${(motionTmp.x * 0.5 + 0.5) * innerWidth}px, ${(-motionTmp.y * 0.5 + 0.5) * innerHeight}px)`;
+  }
+}
+const smoothstep01 = (t) => t * t * (3 - 2 * t);
+initGalaxyMotion();
+
 function createBody(data, isSun) {
   const group = new THREE.Group();
   // ציר הסיבוב מכוון לכיוון האמיתי של הקוטב הצפוני (כך העונות בכדור הארץ נכונות)
@@ -486,6 +647,13 @@ for (const body of bodies) {
   cometChip.addEventListener('click', () => userSelect(cometsInfo));
   $('chooser').appendChild(cometChip);
   cometsInfo.chip = cometChip;
+  const galaxyChip = document.createElement('button');
+  galaxyChip.type = 'button';
+  galaxyChip.className = 'chip';
+  galaxyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌀</span><span>טסים בחלל</span>';
+  galaxyChip.addEventListener('click', () => userSelect(galaxyInfo));
+  $('chooser').appendChild(galaxyChip);
+  galaxyInfo.chip = galaxyChip;
 }
 {
   const chip = document.createElement('button');
@@ -581,6 +749,10 @@ function flyTo(body, duration = null) {
   let offset;
   if (!body) {
     offset = null;
+  } else if (body.isGalaxy) {
+    // מבט מהצד על השבילים: מאונך לכיוון התנועה
+    const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
+    offset = side.multiplyScalar(-250).add(new THREE.Vector3(0, 30, 0)).multiplyScalar(camera.aspect < 1 ? 1.8 : 1);
   } else if (body.isComet) {
     // מהצד, כדי לראות את הזנב לכל אורכו
     const out = body.group.position.clone().normalize();
@@ -654,7 +826,7 @@ function updateViewOffset(dt) {
 
 // ---------- תוויות על המסך ----------
 // סדר עדיפות לתוויות: הכוכב שנבחר, השמש, ואז מהגדול לקטן. תווית שמתנגשת באחרת מוסתרת.
-const labelOrder = () => [...bodies, ...comets].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
+const labelOrder = () => [...bodies, ...(motionMix > 0.3 ? [] : comets)].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
 
 function updateLabels() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -1060,6 +1232,8 @@ function markActive(body) {
     c.orbitLine.material.opacity = c === body ? 0.7 : 0.18;
   }
   cometsInfo.chip.classList.toggle('active', body === cometsInfo || !!body?.isComet);
+  galaxyInfo.chip.classList.toggle('active', body === galaxyInfo);
+  motionTarget = body === galaxyInfo ? 1 : 0;
 }
 
 const distFmt = new Intl.NumberFormat('he-IL', { maximumFractionDigits: 1 });
@@ -1091,6 +1265,13 @@ $('btn-scale').addEventListener('click', () => {
 
 function showBody(body) {
   if (body === cometsInfo) return showComets();
+  if (body === galaxyInfo) {
+    markActive(galaxyInfo);
+    presenter.play('open', 2.6);
+    flyTo(galaxyInfo, 3);
+    const d = GALAXY_MOTION;
+    return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+  }
   const d = body.data;
   markActive(body);
   presenter.play('point', 2.4);
@@ -1226,6 +1407,7 @@ const tourSteps = [
   { intro: TOUR_INTRO },
   ...bodies.flatMap((body) => (body.data.id === 'mars' ? [{ body }, { body: belt }] : [{ body }])),
   { body: cometsInfo },
+  { body: galaxyInfo },
   { intro: TOUR_OUTRO },
 ];
 let tour = null;
@@ -1323,7 +1505,7 @@ let lastDateText = '';
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
-  if (playing) simDays += daysPerSecond * dt;
+  if (playing) simDays += Math.max(daysPerSecond, MOTION_MIN_SPEED * motionMix) * dt;
   if (scaleT !== scaleTarget) {
     scaleT = scaleTarget > scaleT ? Math.min(1, scaleT + dt / 2.8) : Math.max(0, scaleT - dt / 2.8);
     scaleMix = scaleT * scaleT * (3 - 2 * scaleT);
@@ -1332,6 +1514,7 @@ function frame() {
   updateOrbits();
   updateAsteroids();
   updateComets();
+  updateGalaxyMotion(dt);
   updateLiveDistance();
   updateCamera(dt);
   controls.update();
