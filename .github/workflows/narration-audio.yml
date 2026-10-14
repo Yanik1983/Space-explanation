@@ -1,5 +1,8 @@
-# יוצר את קבצי השמע של ההקראה (audio/) בעזרת tools/generate_audio.py,
+# יוצר את קבצי השמע של ההקראה (audio/) בקול של נועם (VoxCPM2, tools/voices/noam.wav),
 # בכל פעם שהטקסטים או הסקריפט משתנים, ומעלה אותם חזרה למאגר.
+# על מעבד רגיל VoxCPM2 איטי, ולכן העבודה מחולקת ל־20 ריצות במקביל. רק משפטים חדשים או
+# שהשתנו נוצרים, כך שעריכה של טקסט אחד מהירה. האתר עובר לקבצים החדשים רק כשכל המשפטים מוכנים;
+# אם חלק נכשל, מה שנוצר נשמר, והריצה הבאה משלימה את השאר.
 name: Narration audio
 
 on:
@@ -10,12 +13,11 @@ on:
       - js/moons.js
       - js/comets.js
       - js/speech.js
-      - tools/**
+      - tools/generate_audio.py
+      - tools/list-sentences.mjs
+      - tools/voices/noam.*
       - .github/workflows/narration-audio.yml
   workflow_dispatch:
-  # פעם בשבוע בודקים שוב: אם edge-tts חזר לעבוד, הקבצים נוצרים מחדש בקול שלו
-  schedule:
-    - cron: '17 4 * * 1'
 
 permissions:
   contents: write
@@ -29,6 +31,11 @@ jobs:
     # בדחיפה – רק ב־branch הראשי, שממנו האתר מתפרסם. הרצה ידנית אפשרית בכל branch.
     if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
       - uses: actions/checkout@v4
 
@@ -42,14 +49,56 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: .cache/tts-models
-          key: tts-models-v1
+          path: ~/.cache/huggingface
+          key: voxcpm2-model-v1
 
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
-      - run: pip install -r tools/requirements-audio.txt
+      - name: Install VoxCPM (CPU)
+        run: |
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install voxcpm soundfile
 
-      - run: python3 tools/generate_audio.py
+      - run: python3 tools/generate_audio.py --engine voxcpm --shard ${{ matrix.shard }}/20
+
+      - name: Collect new files
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/new"
+          git ls-files --others --exclude-standard audio | grep '\.mp3$' | xargs -r cp -t "$RUNNER_TEMP/new"
+          ls "$RUNNER_TEMP/new" | wc -l
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audio-${{ matrix.shard }}
+          path: ${{ runner.temp }}/new
+          if-no-files-found: ignore
+          retention-days: 3
+
+  finalize:
+    needs: generate
+    if: always() && needs.generate.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true  # אין קבצים חדשים = אין מה להוריד
+        with:
+          pattern: audio-*
+          path: audio
+          merge-multiple: true
+
+      - run: python3 tools/generate_audio.py --engine voxcpm --finalize
 
       - name: Commit audio
         run: |

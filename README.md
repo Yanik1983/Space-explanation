@@ -26,18 +26,15 @@
 בכפתור ⚙️ בסרגל העליון אפשר לשנות את **גובה הקול** ואת **מהירות הדיבור**. השינוי נעשה בדפדפן, בלי ליצור מחדש את קבצי השמע: הקבצים מנוגנים דרך Web Audio, ומתיחת זמן (WSOLA, בקובץ `js/speech.js`) מאפשרת לשנות טון ומהירות בנפרד. ההגדרות חלות גם על הקול של הדפדפן, ונשמרות בדפדפן לביקור הבא.
 
 ### יצירת קבצי השמע
-הקבצים נוצרים בחינם, באחד משני מנועים:
-1. **[edge-tts](https://github.com/rany2/edge-tts):** הקולות העבריים של Microsoft Edge. זה המנוע המועדף.
-2. **[Phonikud](https://github.com/thewh1teagle/phonikud) + Piper:** מנוע עברי בקוד פתוח שרץ על המחשב עצמו. משתמשים בו כש־edge-tts לא עובד. רישיון המודלים שלו הוא לשימוש לא מסחרי בלבד.
-
-הסקריפט מנסה קודם את edge-tts, ואם הוא לא עובד, עובר ל־Phonikud. צריך Python 3.12 (או 3.8–3.12), Node.js, ffmpeg וחיבור לאינטרנט:
+הקול של נועם נוצר בחינם עם **[VoxCPM2](https://github.com/OpenBMB/VoxCPM)** (קוד פתוח, רישיון Apache-2.0). הקול עוצב פעם אחת לפי התיאור "ילד בן 10, ידידותי ונלהב", ונשמר בקובץ `tools/voices/noam.wav`. כל משפט נוצר בשיבוט של הקול הזה, כך שנועם נשמע אותו דבר בכל האתר.
 
 ```bash
-pip install -r tools/requirements-audio.txt
-python3 tools/generate_audio.py            # או: --engine edge / --engine phonikud
+pip install torch voxcpm soundfile
+python3 tools/generate_audio.py --engine voxcpm
 ```
 
-- **אוטומטית:** הפעולה `.github/workflows/narration-audio.yml` ב־GitHub Actions מריצה את הסקריפט בכל שינוי בטקסטים, וגם פעם בשבוע, ומעלה את הקבצים למאגר. כך, אם edge-tts חוזר לעבוד, הקול מתחלף אליו לבד. אפשר גם להריץ אותה ידנית בלשונית Actions.
+- **אוטומטית:** הפעולה `.github/workflows/narration-audio.yml` ב־GitHub Actions מריצה את הסקריפט בכל שינוי בטקסטים ומעלה את הקבצים למאגר. VoxCPM2 איטי על מעבד רגיל, ולכן העבודה מתחלקת ל־20 ריצות במקביל. האתר עובר לקבצים החדשים רק כשכל המשפטים מוכנים. אפשר גם להריץ את הפעולה ידנית בלשונית Actions.
+- **מנועים נוספים בסקריפט:** [edge-tts](https://github.com/rany2/edge-tts) (הקולות העבריים של Microsoft Edge, שירות לא רשמי) ו־[Phonikud](https://github.com/thewh1teagle/phonikud) + Piper (רישיון לא מסחרי). הם מותקנים עם `pip install -r tools/requirements-audio.txt` ונבחרים עם `--engine edge` או `--engine phonikud`.
 - הסקריפט יוצר MP3 לכל משפט ואת הקובץ `audio/manifest.json`. אחר כך מעלים את התיקייה `audio/` יחד עם האתר.
 - אחרי עריכת טקסט ב־`js/data.js` מריצים שוב. רק משפטים חדשים או ששונו נוצרים מחדש, וקבצים ישנים נמחקים.
 - משפט שאין לו קובץ מוקרא בקול של הדפדפן, כך ששום דבר לא נשבר.
