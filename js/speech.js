@@ -51,7 +51,8 @@ export class Narrator {
 
   async loadFiles() {
     try {
-      const res = await fetch(AUDIO_DIR + 'manifest.json');
+      // no-cache: בודקים מול השרת בכל טעינה, כדי שקול חדש יגיע מיד ולא אחרי שהמטמון יפוג
+      const res = await fetch(AUDIO_DIR + 'manifest.json', { cache: 'no-cache' });
       if (res.ok) this.files = (await res.json()).files || {};
     } catch {
       // אין קבצים מוקלטים, משתמשים בקול של הדפדפן
