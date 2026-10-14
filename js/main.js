@@ -1473,6 +1473,23 @@ $('tour-stop').addEventListener('click', () => {
 function closeIntro() {
   $('intro').hidden = true;
 }
+// ---------- המסך נשאר דולק ----------
+// בטלפון המסך נכבה אחרי כמה שניות בלי מגע. כל עוד האתר פתוח וגלוי, מבקשים מהמכשיר להשאיר את המסך דולק
+// (Screen Wake Lock). כשעוברים ללשונית אחרת הבקשה משתחררת לבד, ומבקשים אותה שוב כשחוזרים.
+let wakeLock = null;
+async function keepScreenOn() {
+  if (!('wakeLock' in navigator) || document.visibilityState !== 'visible' || wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => (wakeLock = null));
+  } catch {
+    // לא נתמך או נחסם (למשל מצב חיסכון בסוללה) – המסך יתנהג כרגיל
+  }
+}
+document.addEventListener('visibilitychange', keepScreenOn);
+document.addEventListener('pointerdown', keepScreenOn, { passive: true });
+keepScreenOn();
+
 $('start-tour').addEventListener('click', () => {
   closeIntro();
   startTour();
