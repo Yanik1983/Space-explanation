@@ -10,6 +10,7 @@
 const AUDIO_DIR = 'audio/';
 const SETTINGS_KEY = 'narrator-settings';
 export const DEFAULT_SETTINGS = { pitch: 1, speed: 1 };
+const END_SILENCE = 0.08; // שניות שקט שנשארות בסוף כל משפט מוקלט
 
 export function splitSentences(text) {
   return text.match(/[^.!?]+[.!?]*/g).map((s) => s.trim()).filter(Boolean);
@@ -133,6 +134,8 @@ export class Narrator {
       // אם חסר קובץ לחלק מהמשפטים, מקריאים הכול בקול הדפדפן כדי שלא יתחלף קול באמצע
       useFiles = !!ctx && sentences.every((s) => this.files[s]);
       this.status = useFiles ? 'files' : this.voice ? 'browser' : 'none';
+      // מורידים מראש את כל המשפטים של הטקסט, כדי שלא תהיה המתנה לרשת בין משפט למשפט
+      if (useFiles) sentences.forEach((s) => this.buffer(this.files[s]).catch(() => {}));
       next();
     });
   }
@@ -172,10 +175,19 @@ export class Narrator {
   // מחזיר את הקובץ מוכן לניגון בהגדרות הנוכחיות.
   // מנגנים ב־playbackRate = pitch (מעלה גם את הטון וגם את המהירות),
   // ולכן קודם מותחים את הזמן פי pitch / speed, כך שהמהירות הסופית היא speed.
-  async buffer(file) {
+  // שומרים את ההבטחה (Promise) ולא רק את התוצאה, כדי שטעינה מראש וניגון לא יורידו את אותו קובץ פעמיים.
+  buffer(file) {
     const { pitch, speed } = this.settings;
     const key = `${file}|${pitch}|${speed}`;
-    if (this.processed.has(key)) return this.processed.get(key);
+    if (!this.processed.has(key)) {
+      const job = this.prepare(file, pitch / speed);
+      job.catch(() => this.processed.delete(key)); // נכשל? ננסה שוב בפעם הבאה
+      this.processed.set(key, job);
+    }
+    return this.processed.get(key);
+  }
+
+  async prepare(file, factor) {
     let original = this.decoded.get(file);
     if (!original) {
       const res = await fetch(AUDIO_DIR + file);
@@ -186,14 +198,11 @@ export class Narrator {
       );
       this.decoded.set(file, original);
     }
-    const factor = pitch / speed;
-    let result = original;
-    if (Math.abs(factor - 1) > 0.01) {
-      const samples = timeStretch(original.getChannelData(0), factor, original.sampleRate);
-      result = this.audioContext().createBuffer(1, samples.length, original.sampleRate);
-      result.copyToChannel(samples, 0);
-    }
-    this.processed.set(key, result);
+    // מקצרים את השקט שבסוף הקובץ: ההפסקה בין משפטים נשמעת טבעית יותר כשהיא קצרה
+    let samples = trimEnd(original.getChannelData(0), original.sampleRate, END_SILENCE);
+    if (Math.abs(factor - 1) > 0.01) samples = timeStretch(samples, factor, original.sampleRate);
+    const result = this.audioContext().createBuffer(1, samples.length, original.sampleRate);
+    result.copyToChannel(samples, 0);
     return result;
   }
 
@@ -246,6 +255,16 @@ function score(v) {
   if (/natural|online|neural|google|premium|enhanced/.test(n)) s += 2;
   if (v.localService === false) s += 1;
   return s;
+}
+
+// חותך שקט בסוף הקול, ומשאיר רק `keep` שניות
+function trimEnd(samples, sampleRate, keep) {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+  const level = peak * 0.02;
+  let last = samples.length - 1;
+  while (last > 0 && Math.abs(samples[last]) <= level) last--;
+  return samples.slice(0, Math.min(samples.length, last + 1 + Math.round(sampleRate * keep)));
 }
 
 function loadSettings() {
