@@ -406,7 +406,7 @@ function updateGalaxyMotion(dt) {
   dust.visible = motionArrow.visible = on;
 
   // פחות עומס: קווי המסלולים, האסטרואידים והשביטים נעלמים בהדרגה
-  for (const b of bodies) if (b.orbitLine && b !== selected) b.orbitLine.material.opacity = 0.3 * (1 - motionMix);
+  for (const b of bodies) if (b.orbitLine && b !== selected) b.orbitLine.material.opacity = (b.highlight ? 0.95 : 0.3) * (1 - motionMix);
   asteroidPoints.material.opacity = 1 - motionMix;
   asteroidPoints.visible = motionMix < 0.99;
   for (const c of comets) {
@@ -416,7 +416,7 @@ function updateGalaxyMotion(dt) {
   }
 
   // במצב הזה הזמן רץ מהר יותר – מעדכנים גם את התווית
-  const boosted = playing && motionMix > 0 && MOTION_MIN_SPEED * motionMix > daysPerSecond;
+  const boosted = timeRuns() && motionMix > 0 && MOTION_MIN_SPEED * motionMix > simSpeed();
   if (boosted !== speedBoostShown) {
     speedBoostShown = boosted;
     if (boosted) $('speed-label').textContent = `כל שנייה = ${MOTION_MIN_SPEED} ימים`;
@@ -507,6 +507,7 @@ function createBody(data, isSun) {
     );
     glow.scale.setScalar(data.size * 5.5);
     group.add(glow);
+    body.glow = glow;
   } else {
     body.orbitLine = createOrbit(data.color);
   }
@@ -667,24 +668,29 @@ for (const body of bodies) {
 // ---------- זמן ----------
 let daysPerSecond = 5;
 let playing = true;
+// מהירות זמנית שהפתיחה של הסיור קובעת (null = המהירות שהמשתמש בחר). כשהיא פעילה הזמן רץ גם אם עצרו אותו
+let showSpeed = null;
+const simSpeed = () => showSpeed ?? daysPerSecond;
+const timeRuns = () => playing || showSpeed !== null;
 
 function sliderToSpeed(v) {
   return 0.05 * Math.pow(4000, v / 100); // מ־0.05 עד 200 ימים בשנייה
 }
 
 function updateSpeedLabel() {
-  const d = daysPerSecond;
+  const d = simSpeed();
   let text;
   if (d < 1) text = `כל שנייה = ${Math.max(1, Math.round(d * 24))} שעות`;
   else if (d < 60) text = `כל שנייה = ${Math.round(d)} ימים`;
   else text = `כל שנייה = ${(d / 30.44).toFixed(d < 300 ? 1 : 0)} חודשים`;
-  $('speed-label').textContent = playing ? text : 'הזמן עצר';
+  $('speed-label').textContent = timeRuns() ? text : 'הזמן עצר';
 }
 
 const dateFmt = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
 
 $('speed').addEventListener('input', (e) => {
   daysPerSecond = sliderToSpeed(+e.target.value);
+  showSpeed = null; // המשתמש הזיז את המהירות – היא גוברת על ההדגמה
   updateSpeedLabel();
 });
 $('btn-play').addEventListener('click', () => {
@@ -707,8 +713,8 @@ function updateBodies(dt) {
       toDisplay(b.au, b.group.position);
     }
     b.group.scale.setScalar(1 + ((b.isSun ? REAL_SIZE.sun : REAL_SIZE.planet) - 1) * scaleMix);
-    if (playing) {
-      const omega = ((2 * Math.PI) / d.rotation) * daysPerSecond;
+    if (timeRuns()) {
+      const omega = ((2 * Math.PI) / d.rotation) * simSpeed();
       b.spin += Math.sign(omega) * Math.min(Math.abs(omega), MAX_SPIN) * dt;
     }
     b.mesh.rotation.y = b.spin;
@@ -720,8 +726,8 @@ function updateBodies(dt) {
     }
     for (const m of b.moons) {
       if (!m.pivot) continue;
-      if (playing) {
-        const omega = ((2 * Math.PI) / m.data.period) * daysPerSecond;
+      if (timeRuns()) {
+        const omega = ((2 * Math.PI) / m.data.period) * simSpeed();
         m.angle += Math.sign(omega) * Math.min(Math.abs(omega), 2.5) * dt;
       }
       m.pivot.rotation.y = m.angle;
@@ -744,7 +750,7 @@ function overviewPosition() {
   return compressed.lerp(real, scaleMix).multiplyScalar(far);
 }
 
-function flyTo(body, duration = null) {
+function flyTo(body, duration = null, pose = null) {
   const from = { pos: camera.position.clone(), target: controls.target.clone() };
   let offset;
   if (!body) {
@@ -774,7 +780,7 @@ function flyTo(body, duration = null) {
   }
   // טיסה ארוכה יותר כשהדרך ארוכה (למשל במרחקים אמיתיים)
   const travel = from.target.distanceTo(body ? body.group.position : new THREE.Vector3());
-  tween = { from, offset, body, t: 0, duration: duration ?? 1.8 + Math.min(1.7, travel / 600) };
+  tween = { from, offset, body, pose, t: 0, duration: duration ?? 1.8 + Math.min(1.7, travel / 600) };
   followBody = body;
   controls.enabled = false;
   controls.minDistance = body ? sizeOf(body) * 1.6 : 5;
@@ -785,7 +791,7 @@ function updateCamera(dt) {
     tween.t = Math.min(1, tween.t + dt / tween.duration);
     const e = tween.t < 0.5 ? 4 * tween.t ** 3 : 1 - (-2 * tween.t + 2) ** 3 / 2;
     const targetPos = tween.body ? tween.body.group.position : new THREE.Vector3();
-    const camPos = tween.body ? targetPos.clone().add(tween.offset) : overviewPosition();
+    const camPos = tween.body ? targetPos.clone().add(tween.offset) : tween.pose ? tween.pose() : overviewPosition();
     camera.position.lerpVectors(tween.from.pos, camPos, e);
     // מעוף בקשת כלפי מעלה, ולא דרך השמש
     camera.position.y += Math.sin(Math.PI * e) * tween.from.pos.distanceTo(camPos) * 0.35;
@@ -999,6 +1005,7 @@ function speakCurrent(onEnd, from = 0) {
     onSentence: (k) => {
       const i = k + from;
       currentSentence = i;
+      runCue(i);
       spans.forEach((s, j) => s.classList.toggle('speaking', i === j));
       // בחלון קטן (בטלפון) גוללים אל המשפט שמוקרא עכשיו
       spans[i]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1250,6 +1257,7 @@ function updateLiveDistance() {
 }
 
 $('btn-scale').addEventListener('click', () => {
+  endShow();
   scaleTarget = 1 - scaleTarget;
   $('btn-scale').querySelector('span').textContent = scaleTarget ? 'מרחקים מוקטנים' : 'מרחקים אמיתיים';
   $('btn-scale').title = scaleTarget ? 'מעבר למרחקים מוקטנים' : 'מעבר למרחקים אמיתיים';
@@ -1346,7 +1354,10 @@ $('btn-voice').addEventListener('click', () => {
   $('btn-voice').textContent = voiceOn ? '🔊' : '🔇';
   $('btn-voice').title = voiceOn ? 'קריין פועל' : 'קריין כבוי';
   $('btn-voice').setAttribute('aria-pressed', String(voiceOn));
-  if (!voiceOn) stopSpeaking();
+  if (!voiceOn) {
+    stopSpeaking();
+    clearShowEffects();
+  }
 });
 
 // ---------- הגדרות קול ----------
@@ -1408,7 +1419,7 @@ $('settings-test').addEventListener('click', () => {
 
 // ---------- סיור מודרך ----------
 const tourSteps = [
-  { intro: TOUR_INTRO },
+  ...TOUR_INTRO.map((intro) => ({ intro })),
   ...bodies.flatMap((body) => (body.data.id === 'mars' ? [{ body }, { body: belt }] : [{ body }])),
   { body: cometsInfo },
   { body: galaxyInfo },
@@ -1426,6 +1437,7 @@ function startTour() {
 function goToStep(i) {
   if (!tour) return;
   clearTimeout(tour.timer);
+  endShow();
   tour.index = Math.max(0, Math.min(tourSteps.length - 1, i));
   const step = tourSteps[tour.index];
   $('tour-step').textContent = `${tour.index + 1} מתוך ${tourSteps.length}`;
@@ -1439,6 +1451,7 @@ function goToStep(i) {
     flyTo(null);
     presenter.play(step.intro === TOUR_OUTRO ? 'wave' : 'open', 2.6);
     showPanel({ title: step.intro.title, text: step.intro.narration });
+    if (INTRO_CUES[step.intro.id]) startShow(INTRO_CUES[step.intro.id]);
   }
   const advance = () => {
     if (!tour) return;
@@ -1446,12 +1459,156 @@ function goToStep(i) {
     tour.timer = setTimeout(() => goToStep(tour.index + 1), 1800);
   };
   if (voiceOn) speakCurrent(advance);
-  else stopSpeaking();
+  else {
+    stopSpeaking();
+    if (show) playShowSilently();
+  }
+}
+
+// ---------- הפתיחה של הסיור: כל משפט של נועם מפעיל משהו על המסך ----------
+// show = האפקטים של התחנה הנוכחית. כשעוזבים את התחנה (הבא, הקודם, סיום, בחירה אחרת) הכול חוזר למצב הרגיל.
+let show = null;
+let sunPulse = 99;
+
+function pulseSun() {
+  sunPulse = 0;
+}
+function updateSunPulse(dt) {
+  if (sunPulse > 1.6) return;
+  sunPulse += dt;
+  const k = Math.sin(Math.PI * Math.min(1, sunPulse / 1.6) * 2) ** 2; // שתי פעימות
+  sun.glow.scale.setScalar(sun.data.size * 5.5 * (1 + 0.5 * k));
+}
+
+// מדגיש מסלולים ושמות של כוכבי לכת
+function highlight(ids) {
+  for (const b of bodies) {
+    b.highlight = ids.includes(b.data.id);
+    b.label.classList.toggle('active', b.highlight || b === selected);
+  }
+}
+
+function showTimer(fn, ms) {
+  show?.timers.push(setTimeout(fn, ms));
+}
+
+const planetIds = PLANETS.map((p) => p.id).filter((id) => id !== 'pluto'); // שמונה כוכבי הלכת
+const farView = () => (camera.aspect < 1 ? 2.3 : 1);
+// מבט כמעט מהצד – רואים שכל המסלולים כמעט באותו מישור
+const sideView = () => new THREE.Vector3(0, 16, 250).multiplyScalar(farView());
+// מבט מלמעלה וקרוב על כוכבי הלכת הפנימיים
+const innerView = () => new THREE.Vector3(0, 78, 34).multiplyScalar(farView());
+
+// האפקטים לפי מספר המשפט בכל תחנה
+const INTRO_CUES = {
+  welcome: {
+    0: () => {
+      presenter.play('wave', 2.4);
+      flyTo(null, 2.5);
+    },
+    3: () => {
+      pulseSun();
+      planetIds.forEach((id, k) => showTimer(() => highlight(planetIds.slice(0, k + 1)), 900 + k * 380));
+    },
+    4: () => {
+      setShowSpeed(40);
+      flyTo(null, 3.5, sideView);
+    },
+    5: () => {
+      flyTo(null, 3);
+      pulseSun();
+    },
+  },
+  motion: {
+    0: () => {
+      setShowSpeed(40);
+      flyTo(null, 2.5);
+      highlight(['mercury', 'neptune']);
+    },
+    1: () => highlight(['mercury', 'pluto']),
+    2: () => {
+      setShowSpeed(12);
+      highlight(['mercury']);
+      flyTo(null, 3, innerView);
+    },
+    3: () => {
+      setShowSpeed(null);
+      highlight([]);
+      simDays = (Date.now() - J2000) / DAY_MS;
+      flyTo(null, 2.5);
+      flash($('date-label').parentElement);
+    },
+    4: () => {
+      highlight(['earth']);
+      flyTo(bodyById.earth, 3);
+    },
+  },
+  secret: {
+    0: () => {
+      scaleTarget = 1;
+      flyTo(null, 3.5);
+    },
+    2: () => {
+      scaleTarget = show.baseScale;
+      flyTo(null, 3.5);
+    },
+    3: () => $('btn-scale').classList.add('glow'),
+    4: () => presenter.play('wave', 2.4),
+  },
+};
+
+function setShowSpeed(v) {
+  showSpeed = v;
+  updateSpeedLabel();
+}
+
+function flash(el) {
+  el.classList.remove('flash');
+  void el.offsetWidth; // מאתחל את האנימציה
+  el.classList.add('flash');
+}
+
+function startShow(cues) {
+  endShow();
+  show = { cues, timers: [], baseScale: scaleTarget };
+}
+
+// מחזיר את המסך למצב הרגיל, אבל נשארים בתחנה (למשל לפני הקראה חוזרת)
+function clearShowEffects() {
+  if (!show) return;
+  show.timers.forEach(clearTimeout);
+  show.timers = [];
+  setShowSpeed(null);
+  highlight([]);
+  scaleTarget = show.baseScale;
+  $('btn-scale').classList.remove('glow');
+}
+
+function endShow() {
+  clearShowEffects();
+  show = null;
+}
+
+function runCue(i) {
+  if (!show) return;
+  if (i === 0) clearShowEffects();
+  show.cues[i]?.();
+}
+
+// בלי קול: האפקטים רצים לפי זמן קריאה משוער של כל משפט
+function playShowSilently() {
+  let t = 0;
+  splitSentences(currentText).forEach((sentence, i) => {
+    if (i === 0) runCue(0);
+    else showTimer(() => runCue(i), t);
+    t += 700 + sentence.split(/\s+/).length * 420;
+  });
 }
 
 function endTour() {
   if (!tour) return;
   clearTimeout(tour.timer);
+  endShow();
   tour = null;
   $('tourbar').hidden = true;
   document.body.classList.remove('touring');
@@ -1526,7 +1683,8 @@ let lastDateText = '';
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
-  if (playing) simDays += Math.max(daysPerSecond, MOTION_MIN_SPEED * motionMix) * dt;
+  if (timeRuns()) simDays += Math.max(simSpeed(), MOTION_MIN_SPEED * motionMix) * dt;
+  updateSunPulse(dt);
   if (scaleT !== scaleTarget) {
     scaleT = scaleTarget > scaleT ? Math.min(1, scaleT + dt / 2.8) : Math.max(0, scaleT - dt / 2.8);
     scaleMix = scaleT * scaleT * (3 - 2 * scaleT);
