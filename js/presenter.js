@@ -10,6 +10,39 @@ const SKIN = new THREE.Color('#e7b48e');
 const LIPS = new THREE.Color('#c27a72');
 const BLUSH = new THREE.Color('#e79a86');
 const HAIR = new THREE.Color('#3a2418');
+const WARM = new THREE.Color('#e0907a');
+const HALO_AXIS = new THREE.Vector3(0.25, 0.55, 0.8).normalize();
+
+// צבע עור עם מעבר לפי גובה (למשל צוואר שמוצל מתחת לסנטר)
+function skinGradient(geo, fn) {
+  const p = geo.attributes.position;
+  const a = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const [r, g, b] = fn(p.getX(i), p.getY(i), p.getZ(i));
+    a.set([SKIN.r * r, SKIN.g * g, SKIN.b * b], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  return geo;
+}
+
+// "פיזור תת־עורי" זול: תאורה עוטפת שנותנת מעבר חם ורך בקו הצל, במקום מעבר חד ואפור
+function warmWrapLighting(mat, key) {
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <lights_physical_pars_fragment>',
+      THREE.ShaderChunk.lights_physical_pars_fragment.replace(
+        'reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );',
+        `{
+          vec3 wrapW = vec3( 0.45, 0.22, 0.16 );
+          vec3 wrapNL = clamp( ( dot( geometryNormal, directLight.direction ) + wrapW ) / ( 1.0 + wrapW ), 0.0, 1.0 );
+          reflectedLight.directDiffuse += wrapNL * directLight.color * BRDF_Lambert( material.diffuseColor );
+        }`,
+      ),
+    );
+  };
+  mat.customProgramCacheKey = () => key;
+  return mat;
+}
 
 // צבע עור אחיד לגיאומטריה (לחומר שמשתמש בצבעי קודקודים)
 function skinTint(geo, k = [1, 1, 1]) {
@@ -52,7 +85,7 @@ function shapeHead(x0, y0, z0, jaw = 0, smile = 0) {
   }
   // אף: גשר שהולך ובולט עד הקצה
   const ny = clamp((0.2 - y0) / 0.44, 0, 1);
-  dz += (0.03 + 0.24 * ny ** 1.5) * gauss(x0 * x0, 0.07 + 0.06 * ny) * sstep(-0.42, -0.3, y0) * front;
+  dz += (0.03 + 0.2 * ny ** 1.5) * gauss(x0 * x0, 0.07 + 0.06 * ny) * sstep(-0.42, -0.3, y0) * front;
   dz += 0.075 * gauss(x0 * x0 + (y0 + 0.22) ** 2, 0.09) * front; // קצה האף
   // שפתיים וסנטר
   dz += 0.05 * gauss(0.55 * x0 * x0 + (y0 + 0.47) ** 2, 0.065) * front;
@@ -150,8 +183,14 @@ function buildHeadGeometry() {
       gauss(0.6 * x * x + (y + 0.58) ** 2, 0.055),
     ) * sstep(0.36, 0.2, Math.abs(x)) * front;
     c.lerp(LIPS, lip * 0.85);
+    // אזורים חמים יותר: קצה האף, אוזניים, סנטר; ומעט כתמים רכים כדי שהעור לא ייראה כמו פלסטיק אחיד
+    c.lerp(WARM, 0.32 * gauss(x * x + (y + 0.24) ** 2, 0.13) * front);
+    c.lerp(WARM, 0.18 * gauss(x * x + (y + 0.86) ** 2, 0.18) * front);
+    c.lerp(WARM, 0.22 * sstep(0.8, 0.97, Math.abs(x)));
+    c.multiplyScalar(1 + 0.025 * Math.sin(x * 13 + y * 7) * Math.sin(z * 11 - y * 5) + 0.015 * Math.sin(x * 31 - z * 23 + y * 17));
+    c.multiplyScalar(1 - 0.09 * sstep(0.42, 0.72, y)); // צל רך מתחת לשיער
     for (const sd of [-1, 1]) {
-      c.lerp(BLUSH, 0.35 * gauss((x - sd * 0.45) ** 2 + (y + 0.25) ** 2, 0.17) * front);
+      c.lerp(BLUSH, 0.42 * gauss((x - sd * 0.45) ** 2 + (y + 0.27) ** 2, 0.17) * front);
       c.multiplyScalar(1 - 0.25 * gauss((x - sd * 0.1) ** 2 + 2 * (y + 0.335) ** 2, 0.025) * front); // נחיריים
       c.multiplyScalar(1 - 0.14 * gauss((x - sd * 0.36) ** 2 + 1.5 * (y - 0.12) ** 2, 0.17) * front); // עומק סביב העיניים
     }
@@ -192,6 +231,22 @@ function irisTexture() {
     ctx.lineTo(s / 2 + Math.cos(a + 0.05) * r1, s / 2 + Math.sin(a + 0.05) * r1);
     ctx.stroke();
   }
+  // הילה ענברית סביב האישון וטבעת כהה בשולי הקשתית (limbal ring) – נותנות לעין עומק וחיות
+  const amber = ctx.createRadialGradient(s / 2, s / 2, s * 0.14, s / 2, s / 2, s * 0.3);
+  amber.addColorStop(0, 'rgba(214,160,78,0.55)');
+  amber.addColorStop(1, 'rgba(214,160,78,0)');
+  ctx.fillStyle = amber;
+  ctx.beginPath();
+  ctx.arc(s / 2, s / 2, s * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  const limbal = ctx.createRadialGradient(s / 2, s / 2, s * 0.36, s / 2, s / 2, s / 2);
+  limbal.addColorStop(0, 'rgba(20,10,4,0)');
+  limbal.addColorStop(0.55, 'rgba(20,10,4,0.55)');
+  limbal.addColorStop(1, 'rgba(12,6,3,0.95)');
+  ctx.fillStyle = limbal;
+  ctx.beginPath();
+  ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = '#060404';
   ctx.beginPath();
   ctx.arc(s / 2, s / 2, s * 0.15, 0, Math.PI * 2);
@@ -199,6 +254,91 @@ function irisTexture() {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+// מפת נורמלים לגוף החליפה (UV של Lathe: u סביב הגוף, u=0 בחזית; v לאורך הפרופיל).
+// אריג עדין, תפרים עם תפירה מקווקווה, ותפר כתפיים, וקפלים רכים במותניים.
+function suitBodyNormalMap() {
+  const W = 1024, H = 256;
+  const h = new Float32Array(W * H);
+  const seamsU = [0.085, 0.915, 0.25, 0.75, 0.5];
+  for (let y = 0; y < H; y++) {
+    const v = 1 - y / H;
+    for (let x = 0; x < W; x++) {
+      const u = x / W;
+      let e = 0.18 * Math.sin(x * 1.9) * Math.sin(y * 1.9 * 4) + 0.05 * (Math.random() - 0.5);
+      for (const su of seamsU) {
+        let d = Math.abs(u - su);
+        d = Math.min(d, 1 - d) * W;
+        if (d > 12) continue;
+        e -= 2.2 * Math.exp(-((d / 1.6) ** 2));
+        e += 0.7 * Math.exp(-(((d - 3.5) / 1.6) ** 2)) + 0.7 * Math.exp(-(((d + 3.5) / 1.6) ** 2));
+        if ((y >> 1) % 2 === 0) e -= 0.9 * Math.exp(-(((d - 6.5) / 0.9) ** 2)); // תפירה
+      }
+      // תפר כתפיים אופקי
+      const dv = Math.abs(v - 0.62) * H;
+      if (dv < 10) {
+        e -= 2.2 * Math.exp(-((dv / 1.2) ** 2));
+        if ((x >> 2) % 2 === 0) e -= 0.9 * Math.exp(-(((dv - 4) / 0.8) ** 2));
+      }
+      // קפלים רכים מעל החגורה
+      const fold = Math.exp(-(((v - 0.3) / 0.12) ** 2));
+      e += 2.4 * fold * Math.sin(v * 70 + Math.sin(u * 2 * Math.PI * 5) * 1.4) * (0.6 + 0.4 * Math.sin(u * 2 * Math.PI * 3 + 1));
+      h[y * W + x] = e;
+    }
+  }
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  const str = 0.28;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const l = h[y * W + ((x + W - 1) % W)], r = h[y * W + ((x + 1) % W)];
+      const t = h[Math.max(0, y - 1) * W + x], b = h[Math.min(H - 1, y + 1) * W + x];
+      let nx = (l - r) * str, ny = (b - t) * str;
+      const len = Math.hypot(nx, ny, 1);
+      const i = (y * W + x) * 4;
+      img.data[i] = 128 + (nx / len) * 127;
+      img.data[i + 1] = 128 + (ny / len) * 127;
+      img.data[i + 2] = 128 + (1 / len) * 127;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// קווצת שיער: סרט מחודד עם רכס באמצע, שמתעקל חזרה אל הקרקפת; כהה בשורש ובהיר בקצה
+function strandGeometry() {
+  const L = 5, C = 2;
+  const pos = [], col = [], idx = [];
+  for (let i = 0; i <= L; i++) {
+    const t = i / L;
+    const w = (1 - 0.82 * t ** 1.8) * 0.0055;
+    for (let j = 0; j <= C; j++) {
+      const sj = (j / C) * 2 - 1;
+      pos.push(sj * w, t * 0.032, (1 - sj * sj) * 0.0013 * (1 - t * 0.7) - 0.011 * t * t);
+      const k = 0.6 + 0.45 * t ** 1.2;
+      col.push(k, k, k);
+    }
+  }
+  for (let i = 0; i < L; i++) {
+    for (let j = 0; j < C; j++) {
+      const a = i * (C + 1) + j, b = a + 1, c = a + C + 1, d = c + 1;
+      idx.push(a, b, c, b, d, c);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
 }
 
 function fabricNormalMap() {
@@ -283,8 +423,8 @@ export class Presenter {
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }));
     r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     r.setClearColor(0x000000, 0);
-    r.toneMapping = THREE.ACESFilmicToneMapping;
-    r.toneMappingExposure = 1.05;
+    r.toneMapping = THREE.NeutralToneMapping;
+    r.toneMappingExposure = 0.95;
     container.appendChild(r.domElement);
 
     this.scene = new THREE.Scene();
@@ -296,15 +436,19 @@ export class Presenter {
     this.camera.position.set(0, 1.16, 1.3);
     this.camera.lookAt(0, 1.11, 0);
 
-    const key = new THREE.DirectionalLight(0xfff0e0, 2.4);
-    key.position.set(1.2, 2, 2);
+    // תאורת שלוש נקודות: אור מפתח חם, מילוי רך וקריר, ושני אורות קצה מאחור שמפרידים את הדמות מהחלל הכהה
+    const key = new THREE.DirectionalLight(0xfff0e2, 2.1);
+    key.position.set(1.3, 1.9, 2);
     this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffd9c4, 0.6);
-    fill.position.set(-1.5, 0.5, 1.5);
+    const fill = new THREE.DirectionalLight(0xdfe6ff, 0.55);
+    fill.position.set(-1.6, 0.6, 1.4);
     this.scene.add(fill);
-    const rim = new THREE.DirectionalLight(0x9fc0ff, 1.3);
-    rim.position.set(-1, 1.5, -1.8);
+    const rim = new THREE.DirectionalLight(0x9fc0ff, 2.2);
+    rim.position.set(-1.3, 1.4, -1.6);
     this.scene.add(rim);
+    const rim2 = new THREE.DirectionalLight(0xffd2a8, 1.4);
+    rim2.position.set(1.4, 1.1, -1.5);
+    this.scene.add(rim2);
     const bounce = new THREE.DirectionalLight(0xffe2cc, 0.55); // אור מוחזר מלמטה, מרכך צללים מתחת לאף ולסנטר
     bounce.position.set(0, -1, 1.2);
     this.scene.add(bounce);
@@ -327,18 +471,25 @@ export class Presenter {
     const root = (this.root = new THREE.Group());
     this.scene.add(root);
 
-    const skinMat = new THREE.MeshPhysicalMaterial({
+    const skinMat = warmWrapLighting(new THREE.MeshPhysicalMaterial({
       vertexColors: true,
-      roughness: 0.52,
-      sheen: 0.6,
+      roughness: 0.5,
+      specularIntensity: 0.6,
+      sheen: 0.45,
       sheenColor: new THREE.Color('#ff9c7a'),
-      sheenRoughness: 0.5,
-      emissive: new THREE.Color('#3a1206'),
-      emissiveIntensity: 0.25,
-    });
+      sheenRoughness: 0.45,
+      emissive: new THREE.Color('#4a1408'),
+      emissiveIntensity: 0.12,
+    }), 'noam-skin');
     this.skinMat = skinMat;
     const fabric = fabricNormalMap();
-    const suitMat = new THREE.MeshStandardMaterial({ color: '#eceff3', roughness: 0.82, normalMap: fabric, normalScale: new THREE.Vector2(0.35, 0.35) });
+    const suitMat = new THREE.MeshPhysicalMaterial({
+      color: '#eceff3', roughness: 0.8, normalMap: fabric, normalScale: new THREE.Vector2(0.35, 0.35),
+      sheen: 0.35, sheenColor: new THREE.Color('#ffffff'), sheenRoughness: 0.6,
+    });
+    const torsoMat = suitMat.clone();
+    torsoMat.normalMap = suitBodyNormalMap();
+    torsoMat.normalScale = new THREE.Vector2(0.9, 0.9);
     const suitDark = new THREE.MeshStandardMaterial({ color: '#8d96a3', roughness: 0.7 });
     const metal = new THREE.MeshStandardMaterial({ color: '#c9ced6', metalness: 0.85, roughness: 0.28 });
     const orange = new THREE.MeshStandardMaterial({ color: '#f08a1c', roughness: 0.6 });
@@ -361,7 +512,7 @@ export class Presenter {
       [0.001, 0.6], [0.115, 0.6], [0.118, 0.72], [0.112, 0.8], [0.122, 0.9], [0.133, 0.98],
       [0.134, 1.03], [0.118, 1.075], [0.075, 1.1], [0.045, 1.115], [0.001, 1.118],
     ].map(([x, y]) => new THREE.Vector2(x, y));
-    const torso = add(body, new THREE.LatheGeometry(profile, 48), suitMat);
+    const torso = add(body, new THREE.LatheGeometry(profile, 64), torsoMat);
     torso.scale.z = 0.68;
     // חזית החליפה
     add(body, new THREE.TorusGeometry(0.118, 0.012, 10, 48), blue, [0, 0.79, 0], [Math.PI / 2, 0, 0], [1, 0.7, 1]);
@@ -381,7 +532,11 @@ export class Presenter {
     add(body, new THREE.TorusGeometry(0.058, 0.004, 8, 48), orange, [0, 1.088, 0.004], [Math.PI / 2 + 0.08, 0, 0]);
 
     // צוואר
-    add(body, skinTint(new THREE.CylinderGeometry(0.041, 0.046, 0.1, 24), [0.93, 0.9, 0.9]), skinMat, [0, 1.13, -0.004]);
+    // הצוואר מוצל יותר למעלה, מתחת לסנטר (תחושת "הסתרה סביבתית")
+    add(body, skinGradient(new THREE.CylinderGeometry(0.041, 0.046, 0.1, 24), (x, y, z) => {
+      const k = 0.7 + 0.22 * sstep(0.045, -0.02, y) * (z > 0 ? 1 : 0.85);
+      return [k, k * 0.95, k * 0.95];
+    }), skinMat, [0, 1.13, -0.004]);
 
     // ---------- ידיים ----------
     this.arms = [];
@@ -434,31 +589,75 @@ export class Presenter {
     // עיניים
     const iris = irisTexture();
     this.eyes = [];
+    // לובן העין: לבן חם במרכז, מעט ורדרד ומוצל לכיוון השוליים
+    const scleraGeo = new THREE.SphereGeometry(0.0115, 32, 24);
+    {
+      const sp = scleraGeo.attributes.position;
+      const cl = new Float32Array(sp.count * 3);
+      for (let i = 0; i < sp.count; i++) {
+        const f = sstep(-0.2, 0.95, sp.getZ(i) / 0.0115);
+        cl.set([0.8 + 0.17 * f, 0.68 + 0.27 * f, 0.68 + 0.25 * f], i * 3);
+      }
+      scleraGeo.setAttribute('color', new THREE.BufferAttribute(cl, 3));
+    }
+    const scleraMat = new THREE.MeshPhysicalMaterial({ color: '#fbf7f2', vertexColors: true, roughness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.08 });
+    const corneaMat = new THREE.MeshPhysicalMaterial({
+      color: '#ffffff', transparent: true, opacity: 0.12, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6, depthWrite: false,
+    });
+    const glintGeo = new THREE.CircleGeometry(1, 16);
+    const glintMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.92, depthWrite: false });
+    const lashMat = new THREE.MeshStandardMaterial({ color: '#1a100b', roughness: 0.7 });
+    const lashGeo = new THREE.CylinderGeometry(0.00006, 0.00026, 1, 4);
+    lashGeo.translate(0, 0.5, 0);
+    // ריסים: קווצות דקות לאורך שפת העפעף, מתעקלות החוצה; ארוכות יותר בצד החיצוני
+    const lashes = (r, theta, up, side, count, len) => {
+      const im = new THREE.InstancedMesh(lashGeo, lashMat, count);
+      const mm = new THREE.Matrix4(), qq = new THREE.Quaternion();
+      for (let i = 0; i < count; i++) {
+        const t = (i + 0.5) / count;
+        const phi = 0.35 + t * (Math.PI - 0.7); // רק בחזית העין
+        const rim = new THREE.Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta) * up).multiplyScalar(r);
+        const outward = new THREE.Vector3(rim.x, 0, rim.z).normalize();
+        const dir = outward.add(new THREE.Vector3(0, 0.45, 0)).normalize();
+        qq.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        const outer = side * -Math.cos(phi) > 0 ? 1 : 0; // הצד הקרוב לרקה
+        const l = len * (0.7 + 0.5 * outer * Math.abs(Math.cos(phi)) + 0.15 * Math.random()) * (1 - 0.35 * Math.abs(Math.cos(phi)) * (1 - outer));
+        mm.compose(rim, qq, new THREE.Vector3(1, l, 1));
+        im.setMatrixAt(i, mm);
+      }
+      return im;
+    };
     for (const side of [-1, 1]) {
       const sp = headPoint(side * 0.36, 0.1).p;
       const eye = new THREE.Group();
       eye.position.set(sp.x, sp.y, sp.z - 0.0095);
-      eye.scale.setScalar(1.1);
+      eye.scale.setScalar(1.15);
       head.add(eye);
       const ball = new THREE.Group();
       eye.add(ball);
-      add(ball, new THREE.SphereGeometry(0.0115, 32, 24), new THREE.MeshStandardMaterial({ color: '#f3efea', roughness: 0.25 }));
-      const irisGeo = new THREE.SphereGeometry(0.01158, 40, 10, 0, Math.PI * 2, 0, 0.52);
+      add(ball, scleraGeo, scleraMat);
+      const irisGeo = new THREE.SphereGeometry(0.01158, 40, 10, 0, Math.PI * 2, 0, 0.56);
       irisGeo.rotateX(Math.PI / 2);
       const ip = irisGeo.attributes.position, iuv = irisGeo.attributes.uv;
-      const ir = 0.01158 * Math.sin(0.52);
+      const ir = 0.01158 * Math.sin(0.56);
       for (let i = 0; i < ip.count; i++) iuv.setXY(i, 0.5 + (ip.getX(i) / ir) * 0.5, 0.5 + (ip.getY(i) / ir) * 0.5);
       add(ball, irisGeo, new THREE.MeshStandardMaterial({ map: iris, roughness: 0.35 }));
-      add(ball, new THREE.SphereGeometry(0.0068, 24, 16), new THREE.MeshPhysicalMaterial({
-        color: '#ffffff', transparent: true, opacity: 0.1, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, depthWrite: false,
-      }), [0, 0, 0.0088], null, [1, 1, 0.5]);
+      add(ball, new THREE.SphereGeometry(0.0072, 24, 16), corneaMat, [0, 0, 0.0086], null, [1, 1, 0.52]);
+      // נצנוץ לח בעין: נשאר במקום ביחס לראש (כמו השתקפות של מקור אור), גם כשהגלגל זז
+      for (const [cx, cy, r] of [[0.32, 0.36, 0.0011], [-0.22, -0.3, 0.0005]]) {
+        const d = new THREE.Vector3(cx, cy, 1).normalize();
+        const glint = add(eye, glintGeo, glintMat, d.clone().multiplyScalar(0.01245).toArray(), null, [r, r, r]);
+        glint.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
+        glint.renderOrder = 2;
+      }
       // עפעפיים
       const lidMat = skinMat;
       const upper = new THREE.Group();
       eye.add(upper);
       add(upper, skinTint(new THREE.SphereGeometry(0.0134, 32, 12, 0, Math.PI * 2, 0, 1.0), [0.95, 0.88, 0.86]), lidMat);
       // ריסים לאורך שפת העפעף העליון
-      add(upper, new THREE.TorusGeometry(0.0134 * Math.sin(1.0), 0.0008, 6, 32, Math.PI), new THREE.MeshStandardMaterial({ color: '#1a100b', roughness: 0.8 }), [0, 0.0134 * Math.cos(1.0), 0], [Math.PI / 2, 0, 0]);
+      add(upper, new THREE.TorusGeometry(0.0134 * Math.sin(1.0), 0.00095, 6, 32, Math.PI), lashMat, [0, 0.0134 * Math.cos(1.0), 0], [Math.PI / 2, 0, 0]);
+      upper.add(lashes(0.0134, 1.0, 1, side, 22, 0.0026));
       const lower = new THREE.Group();
       eye.add(lower);
       add(lower, skinTint(new THREE.SphereGeometry(0.013, 32, 8, 0, Math.PI * 2, 0, 0.9), [0.97, 0.92, 0.9]), lidMat, [0, 0, 0], [Math.PI, 0, 0]);
@@ -466,19 +665,19 @@ export class Presenter {
     }
 
     // גבות: קווצות קטנות לאורך קשת
-    const browGeo = new THREE.CylinderGeometry(0.0002, 0.0008, 0.007, 4);
-    browGeo.translate(0, 0.0035, 0);
-    const browMesh = new THREE.InstancedMesh(browGeo, new THREE.MeshStandardMaterial({ color: '#4a2f1f', roughness: 0.85 }), 110);
+    const browGeo = new THREE.CylinderGeometry(0.00025, 0.001, 0.0075, 4);
+    browGeo.translate(0, 0.0037, 0);
+    const browMesh = new THREE.InstancedMesh(browGeo, new THREE.MeshStandardMaterial({ color: '#3f281a', roughness: 0.8 }), 150);
     this.brows = new THREE.Group();
     head.add(this.brows);
     this.brows.add(browMesh);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1);
     let bi = 0;
     for (const side of [-1, 1]) {
-      for (let i = 0; i < 55; i++) {
-        const t = i / 54;
+      for (let i = 0; i < 75; i++) {
+        const t = i / 74;
         const ux = side * (0.17 + t * 0.4);
-        const uy = 0.33 + Math.sin(t * Math.PI) * 0.06 - t * 0.04 + (Math.random() - 0.5) * 0.045 * (1 - t * 0.5);
+        const uy = 0.33 + Math.sin(t * Math.PI) * 0.06 - t * 0.04 + (Math.random() - 0.5) * 0.06 * (1 - t * 0.55);
         const { p, n } = headPoint(ux, uy);
         p.addScaledVector(n, 0.0006);
         const dir = new THREE.Vector3(side, 0.35 - t * 0.6, 0).normalize();
@@ -540,23 +739,28 @@ export class Presenter {
     g.computeVertexNormals();
     const col = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i++) {
-      const k = 0.8 + Math.random() * 0.3;
+      const k = 0.6 + Math.random() * 0.12;
       col.set([HAIR.r * k, HAIR.g * k, HAIR.b * k], i * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    const hairMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, envMapIntensity: 0.15, side: THREE.DoubleSide });
+    const hairMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, envMapIntensity: 0.15, side: THREE.DoubleSide });
     head.add(new THREE.Mesh(g, hairMat));
 
     // קווצות: חרוטים שטוחים שזורמים מהקודקוד החוצה
-    const strandGeo = new THREE.CylinderGeometry(0.0012, 0.005, 0.032, 5);
-    strandGeo.translate(0, 0.016, 0);
-    const N = 1100;
-    const strands = new THREE.InstancedMesh(strandGeo, new THREE.MeshStandardMaterial({ roughness: 0.8, envMapIntensity: 0.15 }), N);
+    // קווצות: סרטים מחודדים ומעוקלים; חומר עם ברק משי (sheen) והחזר מבריק שיוצר "פס אור" על השיער
+    const strandGeo = strandGeometry();
+    const N = 2100;
+    const strandMat = new THREE.MeshPhysicalMaterial({
+      vertexColors: true, roughness: 0.48, specularIntensity: 0.55, envMapIntensity: 0.25,
+      sheen: 0.3, sheenColor: new THREE.Color('#9a6238'), sheenRoughness: 0.4, side: THREE.DoubleSide,
+    });
+    const strands = new THREE.InstancedMesh(strandGeo, strandMat, N);
+    const tint = [new THREE.Color('#34210f'), new THREE.Color('#3b2615'), new THREE.Color('#2e1d11'), new THREE.Color('#422b19')];
     const crown = new THREE.Vector3(0, 0.75, -0.55).normalize();
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3();
     const c = new THREE.Color();
     let n = 0, guard = 0;
-    while (n < N && guard++ < 20000) {
+    while (n < N && guard++ < 40000) {
       const u = new THREE.Vector3().randomDirection();
       if (u.y < hairline(u.x, u.y, u.z) + 0.12) continue;
       const out = shapeHead(u.x, u.y, u.z);
@@ -567,19 +771,26 @@ export class Presenter {
       if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1).projectOnPlane(normal);
       dir.normalize();
       const fringe = sstep(0.3, 0.8, u.z);
-      dir.lerp(new THREE.Vector3(0.15 * Math.sign(u.x || 1), -0.6, 0.4).projectOnPlane(normal).normalize(), fringe * 0.6).normalize();
+      const swept = dir.clone().lerp(new THREE.Vector3(0.3 + 0.25 * u.x, -0.6, 0.4).projectOnPlane(normal).normalize(), fringe * 0.7); // פוני מוסט מעט הצידה
+      if (swept.lengthSq() > 0.04) dir.copy(swept).normalize();
       const xAxis = new THREE.Vector3().crossVectors(dir, normal).normalize();
       const zAxis = new THREE.Vector3().crossVectors(xAxis, dir).normalize();
       m.makeBasis(xAxis, dir, zAxis);
       q.setFromRotationMatrix(m);
       // קצת הרמה מהקרקפת כדי לתת נפח
-      q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.03 + Math.random() * 0.07));
-      const len = 0.6 + Math.random() * 0.6 + fringe * 0.4;
-      s.set(1.4 + Math.random() * 0.8, len, 0.25);
+      const side = sstep(0.3, -0.3, u.y); // בצדדים ובעורף השיער צמוד יותר לראש
+      q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), (0.1 + Math.random() * 0.13) * (1 - 0.65 * side) - fringe * 0.06));
+      // סיבוב קטן סביב הנורמל – הקווצות לא מקבילות לגמרי, כמו שיער אמיתי
+      q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (Math.random() - 0.5) * 0.35));
+      const len = (0.75 + Math.random() * 0.55) * (1 - 0.35 * fringe) * (1 - 0.25 * side);
+      const wid = 1.15 + Math.random() * 0.7;
+      s.set(wid, len, 0.8 + Math.random() * 0.5);
       m.compose(pos, q, s);
       strands.setMatrixAt(n, m);
-      const k = 0.75 + Math.random() * 0.45;
-      strands.setColorAt(n, c.copy(HAIR).multiplyScalar(k));
+      // פס ברק רך על החלק העליון של הראש (כמו בסרטי אנימציה)
+      const halo = gauss((u.dot(HALO_AXIS) - 0.74) ** 2, 0.13);
+      const k = (0.9 + Math.random() * 0.16) * (1 + 0.35 * halo);
+      strands.setColorAt(n, c.copy(tint[(Math.random() * tint.length) | 0]).multiplyScalar(k));
       n++;
     }
     strands.count = n;
@@ -654,7 +865,7 @@ export class Presenter {
       e.ball.rotation.y = lookSide * 0.35 + this.saccade.x;
       e.ball.rotation.x = -this.saccade.y + 0.02;
       // העפעף העליון יורד בזמן מצמוץ; כשמחייכים העין מעט מצטמצמת
-      e.upper.rotation.x = 0.2 + closed * 0.52;
+      e.upper.rotation.x = 0.13 + closed * 0.59;
       e.lower.rotation.x = -0.08 - closed * 0.12 - this.smile * 0.06;
     }
     this.brows.position.y = talking ? 0.0012 + this.accent * 0.0025 + Math.max(0, Math.sin(t * 2.2)) * 0.0015 : 0;

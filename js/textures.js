@@ -1,7 +1,9 @@
 // טקסטורות של כוכבי הלכת.
 // - כדור הארץ והירח: תמונות אמיתיות (מבוססות על צילומי נאס"א) מתוך הדוגמאות של three.js, בתיקייה textures/.
-// - שאר הגופים: מחושבים (js/texgen.js). קודם מוצגת גרסה קטנה ומהירה, ואז Web Worker מייצר ברקע
-//   גרסה מפורטת (עם מפת גובה לגופים סלעיים) ומחליף אותה.
+// - כוכב חמה, מאדים, צדק, שבתאי, אורנוס ונפטון: מפות אמיתיות (Planet Pixel Emporium, מבוססות על צילומי נאס"א).
+// - השמש, נוגה ופלוטו: מחושבים (js/texgen.js) – לנוגה רואים את העננים ולפלוטו את ה"לב", כמו בצילומים.
+// בכל מקרה קודם מוצגת גרסה קטנה ומחושבת שנטענת מיד, ואז היא מוחלפת. אם תמונה לא נטענת – Web Worker
+// מייצר במקומה גרסה מחושבת מפורטת.
 
 import * as THREE from 'three';
 import { generate, ringProfile, SIZES } from './texgen.js';
@@ -54,6 +56,55 @@ export function loadDetailed(ids, onReady) {
 }
 
 const loader = new THREE.TextureLoader();
+
+// מפות אמיתיות: map = צבע, bump = מפת גובה (הרים ומכתשים)
+const PHOTOS = {
+  mercury: { map: 'mercury_1024.jpg', bump: 'mercury_bump_1024.jpg' },
+  mars: { map: 'mars_1024.jpg', bump: 'mars_bump_1024.jpg' },
+  jupiter: { map: 'jupiter_1024.jpg' },
+  saturn: { map: 'saturn_1024.jpg' },
+  uranus: { map: 'uranus_1024.jpg' },
+  neptune: { map: 'neptune_1024.jpg' },
+};
+export const PHOTO_IDS = Object.keys(PHOTOS);
+
+function loadTexture(path, srgb) {
+  return new Promise((resolve, reject) => {
+    loader.load(path, (tex) => {
+      if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      resolve(tex);
+    }, undefined, reject);
+  });
+}
+
+// טוען את המפות האמיתיות. onReady(id, map, bump) כשהן מוכנות, onFail(id) אם משהו לא נטען
+export function loadPhotos(onReady, onFail) {
+  for (const [id, p] of Object.entries(PHOTOS)) {
+    Promise.all([loadTexture(`textures/${p.map}`, true), p.bump ? loadTexture(`textures/${p.bump}`, false) : null])
+      .then(([map, bump]) => onReady(id, map, bump))
+      .catch(() => onFail(id));
+  }
+}
+
+// הטבעות של שבתאי: צבעים מצילום, שקיפות לפי הצפיפות של כל טבעת
+export function ringPhoto(onReady) {
+  loadTexture('textures/saturn_ring.png', true).then((tex) => {
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    onReady(tex);
+  }).catch(() => {});
+}
+
+// השמיים: תמונה אמיתית של שביל החלב (cube map)
+export function skyTexture() {
+  const tex = new THREE.CubeTextureLoader()
+    .setPath('textures/sky/')
+    .load(['px.jpg', 'nx.jpg', 'py.jpg', 'ny.jpg', 'pz.jpg', 'nz.jpg']);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export function imageTexture(path, srgb = true) {
   const tex = loader.load(path);
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
