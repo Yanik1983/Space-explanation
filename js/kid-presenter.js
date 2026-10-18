@@ -92,7 +92,8 @@ export class Presenter {
     this.gesture = null;
     this.gestureTime = 0;
     this.ready = false;
-    this.arms = [1, -1].map((side) => ({ side, az: -side * 72 * D, ax: -0.08, e: 0, ey: 0, ez: 0 }));
+    this.curlSign = { Left: 1, Right: 1 };
+    this.arms = [1, -1].map((side) => ({ side, az: -side * 72 * D, ax: -0.08, e: 0, ey: 0, ez: 0, curl: 0.35 }));
     this.followers = [];
     this.setSize(this.width, this.height);
 
@@ -166,7 +167,7 @@ export class Presenter {
     const up = new THREE.Vector3(0, 1, 0);
 
     // שרוולים ורגליים: גלילים מתכווצים בין שני מפרקים
-    const limb = (a, b, r0, r1) => {
+    const limb = (a, b, r0, r1, extend = 1) => {
       const geo = new THREE.CylinderGeometry(r1, r0, 1, 24, 1);
       geo.translate(0, 0.5, 0);
       const m = add(new THREE.Mesh(geo, white));
@@ -174,7 +175,7 @@ export class Presenter {
         const A = wp(bones[a]);
         const d = wp(bones[b]).sub(A);
         m.position.copy(A);
-        m.scale.set(1, d.length(), 1);
+        m.scale.set(1, d.length() * extend, 1);
         m.quaternion.setFromUnitVectors(up, d.normalize());
       });
     };
@@ -186,16 +187,6 @@ export class Presenter {
         const d = wp(bones[b]).sub(A);
         m.position.copy(A).addScaledVector(d, t);
         m.quaternion.setFromUnitVectors(up, d.normalize());
-      });
-    };
-    const mitten = (hand, fore) => {
-      const m = add(new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), white));
-      this.followers.push(() => {
-        const H = wp(bones[hand]);
-        const d = H.clone().sub(wp(bones[fore])).normalize();
-        m.position.copy(H).addScaledVector(d, 0.056);
-        m.scale.set(0.046, 0.092, 0.056);
-        m.quaternion.setFromUnitVectors(up, d);
       });
     };
     // חפץ שנצמד לעצם: מיקום ההיסט וסיבוב ההתחלתי נשמרים, והחפץ מקבל את הסיבוב של העצם
@@ -220,14 +211,13 @@ export class Presenter {
 
     for (const side of ['Left', 'Right']) {
       limb(`Boy_${side}Arm`, `Boy_${side}ForeArm`, 0.057, 0.043);
-      limb(`Boy_${side}ForeArm`, `Boy_${side}Hand`, 0.043, 0.035);
+      limb(`Boy_${side}ForeArm`, `Boy_${side}Hand`, 0.043, 0.04, 1.14);
       limb(`Boy_${side}UpLeg`, `Boy_${side}Leg`, 0.06, 0.049);
       limb(`Boy_${side}Leg`, `Boy_${side}Foot`, 0.049, 0.039);
       ring(`Boy_${side}ForeArm`, `Boy_${side}Hand`, 0.8, 0.043, 0.024, blue);
       ring(`Boy_${side}ForeArm`, `Boy_${side}Hand`, 0.97, 0.039, 0.018, orange);
       ring(`Boy_${side}Arm`, `Boy_${side}ForeArm`, 0.18, 0.05, 0.02, blue);
       ring(`Boy_${side}Leg`, `Boy_${side}Foot`, 0.86, 0.043, 0.026, orange);
-      mitten(`Boy_${side}Hand`, `Boy_${side}ForeArm`);
       const cap = add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 24, 18), white));
       this.followers.push(() => cap.position.copy(wp(bones[`Boy_${side}Arm`])));
     }
@@ -264,6 +254,7 @@ export class Presenter {
     tip.scale.set(1.3, 1, 1);
     attach('Boy_Head', tip, [0.027, -0.063, 0.146]);
 
+    this.buildGloves(white);
     this.buildLids(attach);
 
     this.ready = true;
@@ -350,6 +341,66 @@ export class Presenter {
       }
       P.needsUpdate = true;
     }
+  }
+
+
+  // כפפות עם אצבעות: עותק לבן ומעט מנופח של משולשי היד בגוף של הילד, שמחובר לאותן עצמות (גם עצמות האצבעות)
+  buildGloves(material) {
+    let body = null;
+    this.kid.traverse((m) => {
+      if (m.isSkinnedMesh && [].concat(m.material)[0].name === 'lambert3') body = m;
+    });
+    if (!body) return;
+    const g = body.geometry;
+    const pos = g.attributes.position, nor = g.attributes.normal, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+    const bones = body.skeleton.bones;
+    const isHand = bones.map((b) => /Hand|ForeArmRoll1/.test(b.name)); // כולל פרק כף היד
+    const handness = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) {
+      for (let k = 0; k < 4; k++) if (isHand[si.getComponent(i, k)]) handness[i] += sw.getComponent(i, k);
+    }
+    const index = g.index ? g.index.array : null;
+    const tris = [];
+    const keep = [];
+    const n = index ? index.length : pos.count;
+    for (let t = 0; t < n; t += 3) {
+      const a = index ? index[t] : t, b = index ? index[t + 1] : t + 1, c = index ? index[t + 2] : t + 2;
+      if (Math.max(handness[a], handness[b], handness[c]) > 0.3) tris.push(a, b, c);
+      else keep.push(a, b, c);
+    }
+    // העור של הידיים מוסר מהגוף, כדי שלא יבצבץ דרך הכפפה
+    g.setIndex(keep);
+    const remap = new Map();
+    const P = [], N = [], SI = [], SW = [], I = [];
+    const take = (v) => {
+      if (!remap.has(v)) {
+        remap.set(v, P.length / 3);
+        P.push(pos.getX(v), pos.getY(v), pos.getZ(v));
+        N.push(nor.getX(v), nor.getY(v), nor.getZ(v));
+        for (let k = 0; k < 4; k++) { SI.push(si.getComponent(v, k)); SW.push(sw.getComponent(v, k)); }
+      }
+      return remap.get(v);
+    };
+    for (const v of tris) I.push(take(v));
+    // המרה ממטר ליחידות הרשת, כדי לנפח את הכפפה בכ־6.5 מ"מ
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), wa = new THREE.Vector3(), wb = new THREE.Vector3();
+    const first = [...remap.keys()];
+    const rest = (v, out) => { out.fromBufferAttribute(pos, v); body.applyBoneTransform(v, out); return out.applyMatrix4(body.matrixWorld); };
+    a.fromBufferAttribute(pos, first[0]); b.fromBufferAttribute(pos, first[Math.floor(first.length / 2)]);
+    const local = a.distanceTo(b), world = rest(first[0], wa).distanceTo(rest(first[Math.floor(first.length / 2)], wb));
+    const grow = 0.0065 * (local / Math.max(world, 1e-6));
+    for (let i = 0; i < P.length; i += 3) { P[i] += N[i] * grow; P[i + 1] += N[i + 1] * grow; P[i + 2] += N[i + 2] * grow; }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(SI, 4));
+    geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(SW, 4));
+    geo.setIndex(I);
+    const glove = new THREE.SkinnedMesh(geo, material);
+    glove.frustumCulled = false;
+    body.parent.add(glove);
+    glove.bind(body.skeleton, body.bindMatrix);
+    this.glove = glove;
   }
 
   // עפעפיים: שני דיסקים בצבע העור שיורדים על העין כשמצמצים
@@ -451,25 +502,27 @@ export class Presenter {
     const g = this.gestureTime > 0 ? this.gesture : null;
     for (const arm of this.arms) {
       const s = arm.side; // +1 = צד ימין של המסך
-      let az = -s * 72 * D, ax = -5 * D, e = 0, ey = 0, ez = 0;
+      let az = -s * 72 * D, ax = -5 * D, e = 0, ey = 0, ez = 0, curl = 0.35;
       if (talking) {
         az = -s * (77 + Math.sin(t * 2.4 + s) * 3) * D;
         ax = -(26 + Math.sin(t * 1.9 + s * 1.7) * 6) * D;
         e = -(72 + Math.sin(t * 2.7 + s * 0.9) * 9) * D;
-        ey = -s * 0.5;
+        ey = -s * 0.36;
+        curl = 0.28;
       }
       if (g === 'wave' && s === 1) {
-        az = 14 * D; ax = -30 * D; e = 0; ey = 0; ez = (58 + Math.sin(t * 8) * 18) * D;
+        az = 14 * D; ax = -30 * D; e = 0; ey = 0; ez = (58 + Math.sin(t * 8) * 18) * D; curl = 0.04;
       } else if (g === 'point' && s === Math.sign(lookSide || -1)) {
-        az = -s * 40 * D; ax = -75 * D; e = 0; ey = 0; ez = 0;
+        az = -s * 40 * D; ax = -75 * D; e = 0; ey = 0; ez = 0; curl = 0.12;
       } else if (g === 'open') {
-        az = -s * 55 * D; ax = -30 * D; e = -55 * D; ey = s * 0.3; ez = 0;
+        az = -s * 55 * D; ax = -30 * D; e = -55 * D; ey = s * 0.3; ez = 0; curl = 0.1;
       }
       arm.az += (az - arm.az) * k(6);
       arm.ax += (ax - arm.ax) * k(6);
       arm.e += (e - arm.e) * k(6);
       arm.ey += (ey - arm.ey) * k(6);
       arm.ez += (ez - arm.ez) * k(6);
+      arm.curl += (curl - arm.curl) * k(8);
     }
 
     // שלד: מאפסים את העצמות שזזות, ואז מפעילים סיבובים
@@ -489,6 +542,16 @@ export class Presenter {
     const id = new THREE.Quaternion();
     this.turn('Boy_Neck', id.clone().slerp(headQ, 0.45));
     this.turn('Boy_Head', id.clone().slerp(headQ, 0.55));
+    // אצבעות: כיפוף קל של כל אצבע סביב הציר המקומי שלה (האגודל נשאר ישר)
+    for (const arm of this.arms) {
+      const side = arm.side > 0 ? 'Left' : 'Right';
+      for (const f of ['Index', 'Middle', 'Ring', 'Pinky']) {
+        for (const [n, w] of [[1, 0.7], [2, 1], [3, 0.8]]) {
+          const name = `Boy_${side}Hand${f}${n}`;
+          bones[name].quaternion.copy(rest[name]).multiply(rot(AX.y, arm.curl * w * (f === 'Pinky' ? 1.15 : 1) * this.curlSign[side]));
+        }
+      }
+    }
     // לסת: הפתיחה הגדולה ביותר היא כ־0.29 רדיאן
     this.jaw.quaternion.copy(rest.jaw_BND).multiply(rot(AX.x, jaw * 0.36 + 0.015));
     kid.updateMatrixWorld(true);
