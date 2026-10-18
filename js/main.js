@@ -57,7 +57,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 $('scene').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 40000);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 90000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
@@ -617,7 +617,7 @@ const smoothstep01 = (t) => t * t * (3 - 2 * t);
 initGalaxyMotion();
 
 // ---------- שביל החלב מבחוץ ----------
-// גלקסיה ספירלית עם "מוט" במרכז, מנקודות זוהרות. היא מכוונת כמו הגלקסיה האמיתית: המרכז שלה בכיוון
+// ציור של הגלקסיה במבט מלמעלה, על משטח שטוח. הוא מכוון כמו הגלקסיה האמיתית: המרכז שלה בכיוון
 // מזל קשת, והמישור שלה נוטה בכ־60 מעלות למישור של כוכבי הלכת. השמש (נקודת האפס) יושבת על אחת הזרועות,
 // בערך באמצע הדרך בין המרכז לקצה. הגדלים כאן לא בקנה מידה – מערכת השמש האמיתית קטנה מפיקסל בציור הזה.
 const GAL_R = 9000;
@@ -636,63 +636,28 @@ const milky = (() => {
   g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(toSun, GAL_POLE, new THREE.Vector3().crossVectors(toSun, GAL_POLE)));
   scene.add(g);
 
-  const n = window.innerWidth <= 720 ? 32000 : 70000;
-  const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
-  const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
-  const pitch = 13 * DEG, k = 1 / Math.tan(pitch), r0 = 0.1 * GAL_R;
-  const arms = [0, Math.PI, Math.PI / 2, (3 * Math.PI) / 2]; // שתי זרועות גדולות ושתיים קטנות
-  const phase = -Math.log(GAL_SUN_R / r0) * k - arms[2]; // הזרוע הקטנה עוברת בדיוק דרך השמש
-  const barAngle = 30 * DEG;
-  const c = new THREE.Color();
-  for (let i = 0; i < n; i++) {
-    const u = Math.random();
-    let x, y, z;
-    if (u < 0.1) {
-      // הבליטה והמוט במרכז: כוכבים זקנים, צהבהבים
-      const a = gauss() * 0.13 * GAL_R, b = gauss() * 0.045 * GAL_R;
-      x = a * Math.cos(barAngle) - b * Math.sin(barAngle);
-      z = a * Math.sin(barAngle) + b * Math.cos(barAngle);
-      y = gauss() * 0.03 * GAL_R;
-      c.setRGB(1, 0.8 + Math.random() * 0.1, 0.5 + Math.random() * 0.15).multiplyScalar(0.8);
-    } else if (u < 0.86) {
-      // הזרועות: כוכבים צעירים, כחלחלים, ופה ושם ענני גז ורודים
-      const arm = Math.random() < 0.68 ? Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 2);
-      const r = r0 + (GAL_R - r0) * Math.pow(Math.random(), 0.8); // הזרועות נמשכות עד הקצה
-      const th = phase + arms[arm] + Math.log(r / r0) * k + gauss() * (arm < 2 ? 0.09 : 0.07);
-      const rr = r + gauss() * 0.012 * GAL_R;
-      x = rr * Math.cos(th);
-      z = rr * Math.sin(th);
-      y = gauss() * 0.01 * GAL_R;
-      if (Math.random() < 0.04) c.setRGB(1, 0.45, 0.65);
-      else c.setRGB(0.7 + Math.random() * 0.2, 0.8 + Math.random() * 0.15, 1);
-      c.multiplyScalar(1.15 - 0.35 * (r / GAL_R));
-    } else {
-      // דיסק עמום בין הזרועות
-      const r = GAL_R * Math.pow(Math.random(), 0.7);
-      const th = Math.random() * Math.PI * 2;
-      x = r * Math.cos(th);
-      z = r * Math.sin(th);
-      y = gauss() * 0.02 * GAL_R;
-      c.setRGB(0.85, 0.8, 0.7).multiplyScalar(0.3);
-    }
-    pos.set([x, y, z], i * 3);
-    col.set([c.r, c.g, c.b], i * 3);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const stars = new THREE.Points(geo, new THREE.PointsMaterial({
-    size: 26, map: softDot(), vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
-  }));
-  stars.frustumCulled = false;
-  g.add(stars);
-  // זוהר רך של הליבה
-  const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(255,230,180,1)', 'rgba(255,160,60,0)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
-  core.scale.setScalar(GAL_R * 0.38);
+  // הגלקסיה: ציור של שביל החלב במבט מלמעלה (Nick Risinger, נחלת הכלל), לפי המפות של נאס"א.
+  // בתמונה השמש נמצאת מתחת למרכז, ב־74% מהגובה – כלומר במרחק של 24% מרוחב התמונה מהמרכז.
+  // מסובבים את התמונה כך ש"למטה" בתמונה הוא הכיוון אל השמש, ומגדילים אותה כך שהשמש תיפול על נקודת האפס.
+  // מסתכלים עליה מהצד של הקוטב הצפוני של הגלקסיה, כמו בתמונה המקורית (כך היא לא הפוכה).
+  const side = GAL_SUN_R / 0.24;
+  const disk = new THREE.Mesh(
+    new THREE.PlaneGeometry(side, side),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  disk.rotation.x = -Math.PI / 2;
+  const holder = new THREE.Group();
+  holder.rotation.y = Math.PI / 2; // "למטה" בתמונה → לכיוון השמש
+  holder.add(disk);
+  g.add(holder);
+  disk.frustumCulled = false;
+  // זוהר עדין של הבליטה במרכז, כדי שבמבט מהצד הגלקסיה לא תיראה כמו דף שטוח
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(255,230,190,1)', 'rgba(255,170,90,0)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+  core.scale.setScalar(GAL_R * 0.35);
   g.add(core);
   // הסימון "אנחנו כאן": טבעת זוהרת בגודל קבוע על המסך
   const here = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(140,220,255,1)', 'rgba(60,140,255,0)'), blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true, opacity: 0, sizeAttenuation: false }));
-  here.scale.setScalar(0.07);
+  here.scale.setScalar(0.06);
   scene.add(here);
   const label = (text, cls) => {
     const el = document.createElement('div');
@@ -702,9 +667,14 @@ const milky = (() => {
     $('labels').appendChild(el);
     return el;
   };
-  const visible = (o, v) => (o.visible = v);
-  stars.visible = core.visible = here.visible = false;
-  return { stars, core, here, visible, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
+  disk.visible = core.visible = here.visible = false;
+  // התמונה נטענת רק כשמגיעים לתחנה בפעם הראשונה (בזמן שהמצלמה טסה החוצה)
+  const load = () => {
+    if (disk.material.map) return;
+    disk.material.map = imageTexture(window.innerWidth <= 720 ? 'textures/milky_way_1024.jpg' : 'textures/milky_way_2048.jpg');
+    disk.material.needsUpdate = true;
+  };
+  return { disk, core, here, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -719,19 +689,20 @@ function updateMilkyWay(dt) {
   if (milkyMix !== milkyTarget) {
     milkyMix = milkyTarget > milkyMix ? Math.min(1, milkyMix + dt / 2.5) : Math.max(0, milkyMix - dt / 1.5);
   }
+  if (milkyTarget) milky.load();
   const on = milkyMix > 0.001;
-  for (const o of [milky.stars, milky.core, milky.here]) o.visible = on;
-  scene.backgroundIntensity = 1 - 0.9 * milkyMix;
-  starField.material.opacity = 1 - 0.75 * milkyMix;
-  controls.maxDistance = on || followBody === milkyInfo ? 40000 : 8000;
+  for (const o of [milky.disk, milky.core, milky.here]) o.visible = on;
+  // מחוץ לגלקסיה אין כוכבים קרובים מסביב – הרקע שחור לגמרי
+  scene.backgroundIntensity = 1 - milkyMix;
+  starField.material.opacity = 1 - milkyMix;
+  controls.maxDistance = on || followBody === milkyInfo ? 60000 : 8000;
   if (!on) {
     milky.hereLabel.style.display = milky.centreLabel.style.display = 'none';
     return;
   }
-  milky.stars.material.opacity = milkyMix;
-  milky.core.material.opacity = 0.35 * milkyMix;
+  milky.disk.material.opacity = milkyMix;
+  milky.core.material.opacity = 0.25 * milkyMix;
   milky.here.material.opacity = milkyMix * (0.75 + 0.25 * Math.sin(performance.now() / 300));
-  milky.stars.rotation.y -= dt * 0.004; // מסתובבת לאט מאוד (עם כיוון השעון, כמו במציאות)
   placeMilkyLabel(milky.hereLabel, ORIGIN, 14);
   placeMilkyLabel(milky.centreLabel, galaxyGroup.position, 0);
 }
@@ -1044,7 +1015,7 @@ function flyTo(body, duration = null, pose = null) {
   } else if (body.isMilky) {
     // מלמעלה ובזווית, כשהצד של השמש קרוב יותר אלינו
     const toSun = galaxyGroup.position.clone().negate().normalize();
-    offset = GAL_POLE.clone().multiplyScalar(GAL_R * 1.05).addScaledVector(toSun, GAL_R * 0.55).multiplyScalar(camera.aspect < 1 ? 2.1 : 1);
+    offset = GAL_POLE.clone().multiplyScalar(GAL_R * 2.4).addScaledVector(toSun, GAL_R * 1.15).multiplyScalar(camera.aspect < 1 ? 2.1 : 1);
   } else if (body.isComet) {
     // מהצד, כדי לראות את הזנב לכל אורכו
     const out = body.group.position.clone().normalize();
