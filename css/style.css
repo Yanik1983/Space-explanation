@@ -105,6 +105,8 @@ html, body {
 .setting input { width: 100%; accent-color: var(--accent); }
 .setting-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .settings-actions { display: flex; gap: 8px; }
+.credit { margin: 12px 0 0; font-size: 11px; opacity: 0.6; }
+.credit a { color: inherit; }
 .voice-status { margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
 
 /* ---------- זמן ---------- */

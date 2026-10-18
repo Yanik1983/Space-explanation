@@ -417,7 +417,7 @@ function nameTagTexture(name) {
   return tex;
 }
 
-export class Presenter {
+export class ProceduralPresenter {
   constructor(container) {
     this.container = container;
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }));
