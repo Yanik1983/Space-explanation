@@ -71,8 +71,12 @@ scene.backgroundIntensity = 0.85;
 // זוהר סביב דברים בהירים (השמש) – "bloom". במכשירים חלשים, או אם האתר מתחיל לגמגם, הוא נכבה לבד.
 // ?fx=high / ?fx=low בכתובת מכריחים מצב מסוים (לבדיקות).
 const fxParam = new URLSearchParams(location.search).get('fx');
+// בטלפונים הוא כבוי: בחלק מהטלפונים מעבד הגרפיקה לא תומך בו (והמסך יוצא שחור), והוא גם מבזבז סוללה.
+// להילה של השמש יש גם גרסה רגילה, כך שבלי bloom היא עדיין זוהרת.
 const weakDevice = (navigator.hardwareConcurrency || 4) < 4 || (navigator.deviceMemory || 4) < 3;
-let bloomOn = fxParam === 'high' || (fxParam !== 'low' && !weakDevice);
+const touchDevice = matchMedia('(pointer: coarse)').matches;
+const canRenderFloat = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
+let bloomOn = fxParam === 'high' || (fxParam !== 'low' && !weakDevice && !touchDevice && canRenderFloat);
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.75, 0.55, 0.9);
@@ -91,6 +95,26 @@ function watchPerformance(rawDt) {
   perf.slow = avg > 1 / 30 ? perf.slow + 1 : 0; // פחות מ־30 פריימים בשנייה
   perf.t = perf.n = 0;
   if (perf.slow >= 2 || avg > 1 / 15) bloomOn = false; // איטי מאוד – מכבים מיד
+}
+
+// בדיקה עצמית: אחרי כמה פריימים עם bloom בודקים שהשמש באמת נראית על המסך.
+// אם מעבד הגרפיקה לא הצליח לצייר (מסך שחור) – מכבים את ה־bloom וממשיכים בציור הרגיל.
+let bloomCheck = { frames: 0, done: false };
+function checkBloomOutput() {
+  if (bloomCheck.done || ++bloomCheck.frames < 4) return;
+  const v = sun.group.position.clone().project(camera);
+  if (v.z > 1 || Math.abs(v.x) > 0.8 || Math.abs(v.y) > 0.8) return; // השמש לא במסך – בודקים בפעם אחרת
+  bloomCheck.done = true;
+  const gl = renderer.getContext();
+  const x = Math.round((v.x * 0.5 + 0.5) * gl.drawingBufferWidth);
+  const y = Math.round((v.y * 0.5 + 0.5) * gl.drawingBufferHeight);
+  const px = new Uint8Array(4 * 25);
+  renderer.setRenderTarget(null);
+  gl.readPixels(x - 2, y - 2, 5, 5, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  let brightest = 0;
+  for (let i = 0; i < px.length; i += 4) brightest = Math.max(brightest, px[i] + px[i + 1]);
+  if (brightest < 120 && !fxParam) bloomOn = false;
+  bloomCheck.brightest = brightest;
 }
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.28));
@@ -1837,8 +1861,10 @@ function frame() {
   updateViewOffset(dt);
   camera.updateMatrixWorld();
   sunView.value.set(0, 0, 0).applyMatrix4(camera.matrixWorldInverse);
-  if (bloomOn) composer.render(dt);
-  else renderer.render(scene, camera);
+  if (bloomOn) {
+    composer.render(dt);
+    checkBloomOutput();
+  } else renderer.render(scene, camera);
   updateLabels();
 
   if (guideOn) {
@@ -1868,4 +1894,4 @@ window.addEventListener('resize', () => {
 presenter.play('wave', 3);
 
 // גישה נוחה לבדיקות מהקונסול
-window.solar = { bodies: bodyById, narrator, presenter, comets, setDate: (iso) => (simDays = (Date.parse(iso) - J2000) / DAY_MS), bloom: () => bloomOn };
+window.solar = { bodies: bodyById, narrator, presenter, comets, setDate: (iso) => (simDays = (Date.parse(iso) - J2000) / DAY_MS), bloom: () => ({ on: bloomOn, check: bloomCheck }) };
