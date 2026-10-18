@@ -669,12 +669,92 @@ const milky = (() => {
   };
   disk.visible = core.visible = here.visible = false;
   // התמונה נטענת רק כשמגיעים לתחנה בפעם הראשונה (בזמן שהמצלמה טסה החוצה)
+  // נקודת השמש על הדיסק: מסתובבת יחד עם הגלקסיה
+  const sunAnchor = new THREE.Object3D();
+  sunAnchor.position.set(0, 0, GAL_SUN_R);
+  holder.add(sunAnchor);
+
+  // שכבת כוכבים תלת־ממדית מעל הציור: הכוכבים נדגמים מהתמונה עצמה (צבע ובהירות), עם עובי אמיתי –
+  // דק בזרועות ועבה יותר במרכז. הם מנצנצים, ומדי פעם כוכב מתלקח לרגע.
+  const starsMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uScale: { value: 1 } },
+    vertexShader: `${LOGDEPTH_V[0]}
+      attribute float size; attribute float phase; attribute float flare;
+      uniform float uTime; uniform float uScale;
+      varying vec3 vColor; varying float vAlpha;
+      void main() {
+        vColor = color;
+        float tw = 0.6 + 0.4 * sin(uTime * (1.2 + fract(phase * 7.3) * 2.5) + phase * 6.2831);
+        float burst = flare * pow(max(0.0, sin(uTime * 0.35 + phase * 40.0)), 60.0);
+        vAlpha = tw + 3.0 * burst;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size * (1.0 + 2.5 * burst) * uScale / -mv.z;
+        gl_Position = projectionMatrix * mv;
+        ${LOGDEPTH_V[1]}
+      }`,
+    fragmentShader: `${LOGDEPTH_F[0]}
+      uniform float uOpacity; varying vec3 vColor; varying float vAlpha;
+      void main() {
+        ${LOGDEPTH_F[1]}
+        vec2 d = gl_PointCoord - 0.5;
+        float a = smoothstep(0.5, 0.0, length(d));
+        gl_FragColor = vec4(vColor * a * vAlpha * uOpacity, 1.0);
+        #include <colorspace_fragment>
+      }`,
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const starPoints = new THREE.Points(new THREE.BufferGeometry(), starsMat);
+  starPoints.frustumCulled = false;
+  starPoints.visible = false;
+  disk.add(starPoints);
+
+  function sampleStars(img) {
+    const N = window.innerWidth <= 720 ? 6000 : 12000;
+    const W = 512;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = W;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, W, W);
+    const px = ctx.getImageData(0, 0, W, W).data;
+    const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), size = new Float32Array(N), phase = new Float32Array(N), flare = new Float32Array(N);
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+    const c = new THREE.Color();
+    let n = 0;
+    for (let tries = 0; n < N && tries < N * 60; tries++) {
+      const x = Math.floor(Math.random() * W), y = Math.floor(Math.random() * W);
+      const i = (y * W + x) * 4;
+      const L = (px[i] + px[i + 1] + px[i + 2]) / 765;
+      if (Math.random() > L * L * 2.2) continue; // יותר כוכבים איפה שהתמונה בהירה
+      const u = (x + Math.random()) / W - 0.5, v = 0.5 - (y + Math.random()) / W;
+      const r = Math.hypot(u, v);
+      const thick = side * (0.004 + 0.035 * Math.exp(-(r * r) / (2 * 0.06 * 0.06)));
+      pos.set([u * side, v * side, gauss() * thick], n * 3);
+      c.setRGB(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255, THREE.SRGBColorSpace).multiplyScalar(0.9);
+      col.set([c.r, c.g, c.b], n * 3);
+      size[n] = 18 + 45 * L * Math.random();
+      phase[n] = Math.random();
+      flare[n] = Math.random() < 0.008 ? 1 : 0;
+      n++;
+    }
+    const geo = starPoints.geometry;
+    geo.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, n * 3), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col.subarray(0, n * 3), 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(size.subarray(0, n), 1));
+    geo.setAttribute('phase', new THREE.BufferAttribute(phase.subarray(0, n), 1));
+    geo.setAttribute('flare', new THREE.BufferAttribute(flare.subarray(0, n), 1));
+  }
+
   const load = () => {
     if (disk.material.map) return;
-    disk.material.map = imageTexture(window.innerWidth <= 720 ? 'textures/milky_way_1024.jpg' : 'textures/milky_way_2048.jpg');
+    disk.material.map = new THREE.TextureLoader().load(window.innerWidth <= 720 ? 'textures/milky_way_1024.jpg' : 'textures/milky_way_2048.jpg', (tex) => sampleStars(tex.image));
+    disk.material.map.colorSpace = THREE.SRGBColorSpace;
+    disk.material.map.anisotropy = 8;
     disk.material.needsUpdate = true;
   };
-  return { disk, core, here, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
+  return { disk, core, here, holder, sunAnchor, starPoints, starsMat, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -691,7 +771,9 @@ function updateMilkyWay(dt) {
   }
   if (milkyTarget) milky.load();
   const on = milkyMix > 0.001;
-  for (const o of [milky.disk, milky.core, milky.here]) o.visible = on;
+  for (const o of [milky.disk, milky.core, milky.here, milky.starPoints]) o.visible = on;
+  // מבחוץ מערכת השמש קטנה מנקודה – מסתירים את הגופים עצמם (הסימון "אנחנו כאן" מראה איפה היא)
+  for (const b of bodies) b.group.visible = milkyMix < 0.5;
   // מחוץ לגלקסיה אין כוכבים קרובים מסביב – הרקע שחור לגמרי
   scene.backgroundIntensity = 1 - milkyMix;
   starField.material.opacity = 1 - milkyMix;
@@ -700,10 +782,17 @@ function updateMilkyWay(dt) {
     milky.hereLabel.style.display = milky.centreLabel.style.display = 'none';
     return;
   }
+  const t = performance.now() / 1000;
+  // הגלקסיה מסתובבת עם כיוון השעון (במבט מהקוטב הצפוני שלה), והשמש מקיפה איתה את המרכז
+  milky.holder.rotation.y -= dt * 0.025;
   milky.disk.material.opacity = milkyMix;
-  milky.core.material.opacity = 0.25 * milkyMix;
-  milky.here.material.opacity = milkyMix * (0.75 + 0.25 * Math.sin(performance.now() / 300));
-  placeMilkyLabel(milky.hereLabel, ORIGIN, 14);
+  milky.starsMat.uniforms.uOpacity.value = milkyMix;
+  milky.starsMat.uniforms.uTime.value = t;
+  milky.starsMat.uniforms.uScale.value = (renderer.domElement.height / 2) / Math.tan((camera.fov * DEG) / 2);
+  milky.core.material.opacity = milkyMix * (0.22 + 0.08 * Math.sin(t * 0.8)); // הליבה "נושמת"
+  milky.here.material.opacity = milkyMix * (0.75 + 0.25 * Math.sin(t * 3.3));
+  milky.sunAnchor.getWorldPosition(milky.here.position);
+  placeMilkyLabel(milky.hereLabel, milky.here.position, 14);
   placeMilkyLabel(milky.centreLabel, galaxyGroup.position, 0);
 }
 
@@ -1500,6 +1589,7 @@ function markActive(body) {
   galaxyInfo.chip.classList.toggle('active', body === galaxyInfo);
   milkyInfo.chip.classList.toggle('active', body === milkyInfo);
   motionTarget = body === galaxyInfo ? 1 : 0;
+  if (body === milkyInfo && milkyMix === 0) milky.holder.rotation.y = Math.PI / 2; // השמש מתחילה במקום האמיתי שלה
   milkyTarget = body === milkyInfo ? 1 : 0;
 }
 
