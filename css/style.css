@@ -450,3 +450,7 @@ body.term-open #panel { visibility: hidden; }
 }
 .flash { animation: flash 0.6s ease-in-out 3; }
 @keyframes flash { 50% { color: #ffc850; text-shadow: 0 0 10px rgba(255, 200, 80, 0.9); } }
+
+/* שביל החלב מבחוץ: "אנחנו כאן" ו"מרכז הגלקסיה" */
+.label.milky-here { background: rgba(40, 120, 255, 0.45); border-color: rgba(140, 210, 255, 0.9); font-weight: 700; }
+.label.milky-centre { background: rgba(120, 80, 20, 0.45); border-color: rgba(255, 210, 140, 0.8); }

@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION } from './data.js';
+import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, MILKY_WAY } from './data.js';
 import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto, skyTexture } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
@@ -124,7 +124,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.28));
 const sunLight = new THREE.PointLight(0xfff4e0, 3, 0, 0);
 scene.add(sunLight);
 
-addStars();
+const starField = addStars();
 
 // ---------- גופים ----------
 const bodies = [];
@@ -551,11 +551,12 @@ function updateGalaxyMotion(dt) {
   dust.visible = motionArrow.visible = on;
 
   // פחות עומס: קווי המסלולים, האסטרואידים והשביטים נעלמים בהדרגה
-  for (const b of bodies) if (b.orbitLine && b !== selected) b.orbitLine.material.opacity = (b.highlight ? 0.95 : 0.3) * (1 - motionMix);
-  asteroidPoints.material.opacity = 1 - motionMix;
-  asteroidPoints.visible = motionMix < 0.99;
+  for (const b of bodies) if (b.orbitLine && b !== selected) b.orbitLine.material.opacity = (b.highlight ? 0.95 : 0.3) * (1 - motionMix) * (1 - milkyMix);
+  // גם כשמסתכלים על הגלקסיה מבחוץ (שם מערכת השמש קטנה מנקודה)
+  asteroidPoints.material.opacity = (1 - motionMix) * (1 - milkyMix);
+  asteroidPoints.visible = motionMix < 0.99 && milkyMix < 0.99;
   for (const c of comets) {
-    c.group.visible = c.orbitLine.visible = motionMix < 0.5;
+    c.group.visible = c.orbitLine.visible = motionMix < 0.5 && milkyMix < 0.5;
     if (motionMix >= 0.5) c.ion.visible = c.dust.visible = false;
     if (motionMix > 0.3) c.label.style.display = 'none';
   }
@@ -614,6 +615,126 @@ function updateGalaxyMotion(dt) {
 }
 const smoothstep01 = (t) => t * t * (3 - 2 * t);
 initGalaxyMotion();
+
+// ---------- שביל החלב מבחוץ ----------
+// גלקסיה ספירלית עם "מוט" במרכז, מנקודות זוהרות. היא מכוונת כמו הגלקסיה האמיתית: המרכז שלה בכיוון
+// מזל קשת, והמישור שלה נוטה בכ־60 מעלות למישור של כוכבי הלכת. השמש (נקודת האפס) יושבת על אחת הזרועות,
+// בערך באמצע הדרך בין המרכז לקצה. הגדלים כאן לא בקנה מידה – מערכת השמש האמיתית קטנה מפיקסל בציור הזה.
+const GAL_R = 9000;
+const GAL_SUN_R = 0.52 * GAL_R;
+const GAL_POLE = poleVector([192.859, 27.128]); // הקוטב הצפוני של הגלקסיה
+const GAL_CENTRE_DIR = poleVector([266.405, -28.936]); // מרכז הגלקסיה (קשת A*)
+// המצלמה מכוונת לנקודה שבין מרכז הגלקסיה לשמש, כדי שגם המרכז וגם "אנחנו כאן" ייראו
+const milkyInfo = { data: MILKY_WAY, isMilky: true, moons: [], group: new THREE.Object3D() };
+const galaxyGroup = new THREE.Group();
+let milkyMix = 0, milkyTarget = 0;
+const milky = (() => {
+  const g = galaxyGroup;
+  g.position.copy(GAL_CENTRE_DIR).multiplyScalar(GAL_SUN_R);
+  milkyInfo.group.position.copy(g.position).multiplyScalar(0.45);
+  const toSun = GAL_CENTRE_DIR.clone().negate().projectOnPlane(GAL_POLE).normalize();
+  g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(toSun, GAL_POLE, new THREE.Vector3().crossVectors(toSun, GAL_POLE)));
+  scene.add(g);
+
+  const n = window.innerWidth <= 720 ? 32000 : 70000;
+  const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+  const pitch = 13 * DEG, k = 1 / Math.tan(pitch), r0 = 0.1 * GAL_R;
+  const arms = [0, Math.PI, Math.PI / 2, (3 * Math.PI) / 2]; // שתי זרועות גדולות ושתיים קטנות
+  const phase = -Math.log(GAL_SUN_R / r0) * k - arms[2]; // הזרוע הקטנה עוברת בדיוק דרך השמש
+  const barAngle = 30 * DEG;
+  const c = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    const u = Math.random();
+    let x, y, z;
+    if (u < 0.1) {
+      // הבליטה והמוט במרכז: כוכבים זקנים, צהבהבים
+      const a = gauss() * 0.13 * GAL_R, b = gauss() * 0.045 * GAL_R;
+      x = a * Math.cos(barAngle) - b * Math.sin(barAngle);
+      z = a * Math.sin(barAngle) + b * Math.cos(barAngle);
+      y = gauss() * 0.03 * GAL_R;
+      c.setRGB(1, 0.8 + Math.random() * 0.1, 0.5 + Math.random() * 0.15).multiplyScalar(0.8);
+    } else if (u < 0.86) {
+      // הזרועות: כוכבים צעירים, כחלחלים, ופה ושם ענני גז ורודים
+      const arm = Math.random() < 0.68 ? Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 2);
+      const r = r0 + (GAL_R - r0) * Math.pow(Math.random(), 0.8); // הזרועות נמשכות עד הקצה
+      const th = phase + arms[arm] + Math.log(r / r0) * k + gauss() * (arm < 2 ? 0.09 : 0.07);
+      const rr = r + gauss() * 0.012 * GAL_R;
+      x = rr * Math.cos(th);
+      z = rr * Math.sin(th);
+      y = gauss() * 0.01 * GAL_R;
+      if (Math.random() < 0.04) c.setRGB(1, 0.45, 0.65);
+      else c.setRGB(0.7 + Math.random() * 0.2, 0.8 + Math.random() * 0.15, 1);
+      c.multiplyScalar(1.15 - 0.35 * (r / GAL_R));
+    } else {
+      // דיסק עמום בין הזרועות
+      const r = GAL_R * Math.pow(Math.random(), 0.7);
+      const th = Math.random() * Math.PI * 2;
+      x = r * Math.cos(th);
+      z = r * Math.sin(th);
+      y = gauss() * 0.02 * GAL_R;
+      c.setRGB(0.85, 0.8, 0.7).multiplyScalar(0.3);
+    }
+    pos.set([x, y, z], i * 3);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const stars = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 26, map: softDot(), vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  stars.frustumCulled = false;
+  g.add(stars);
+  // זוהר רך של הליבה
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(255,230,180,1)', 'rgba(255,160,60,0)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+  core.scale.setScalar(GAL_R * 0.38);
+  g.add(core);
+  // הסימון "אנחנו כאן": טבעת זוהרת בגודל קבוע על המסך
+  const here = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(140,220,255,1)', 'rgba(60,140,255,0)'), blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true, opacity: 0, sizeAttenuation: false }));
+  here.scale.setScalar(0.07);
+  scene.add(here);
+  const label = (text, cls) => {
+    const el = document.createElement('div');
+    el.className = `label ${cls}`;
+    el.textContent = text;
+    el.style.display = 'none';
+    $('labels').appendChild(el);
+    return el;
+  };
+  const visible = (o, v) => (o.visible = v);
+  stars.visible = core.visible = here.visible = false;
+  return { stars, core, here, visible, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
+})();
+
+const milkyTmp = new THREE.Vector3();
+function placeMilkyLabel(el, worldPos, dy) {
+  milkyTmp.copy(worldPos).project(camera);
+  const show = milkyMix > 0.6 && milkyTmp.z < 1;
+  el.style.display = show ? '' : 'none';
+  if (show) el.style.transform = `translate(-50%, 0) translate(${(milkyTmp.x * 0.5 + 0.5) * innerWidth}px, ${(-milkyTmp.y * 0.5 + 0.5) * innerHeight + dy}px)`;
+}
+
+function updateMilkyWay(dt) {
+  if (milkyMix !== milkyTarget) {
+    milkyMix = milkyTarget > milkyMix ? Math.min(1, milkyMix + dt / 2.5) : Math.max(0, milkyMix - dt / 1.5);
+  }
+  const on = milkyMix > 0.001;
+  for (const o of [milky.stars, milky.core, milky.here]) o.visible = on;
+  scene.backgroundIntensity = 1 - 0.9 * milkyMix;
+  starField.material.opacity = 1 - 0.75 * milkyMix;
+  controls.maxDistance = on || followBody === milkyInfo ? 40000 : 8000;
+  if (!on) {
+    milky.hereLabel.style.display = milky.centreLabel.style.display = 'none';
+    return;
+  }
+  milky.stars.material.opacity = milkyMix;
+  milky.core.material.opacity = 0.35 * milkyMix;
+  milky.here.material.opacity = milkyMix * (0.75 + 0.25 * Math.sin(performance.now() / 300));
+  milky.stars.rotation.y -= dt * 0.004; // מסתובבת לאט מאוד (עם כיוון השעון, כמו במציאות)
+  placeMilkyLabel(milky.hereLabel, ORIGIN, 14);
+  placeMilkyLabel(milky.centreLabel, galaxyGroup.position, 0);
+}
 
 function createBody(data, isSun) {
   const group = new THREE.Group();
@@ -761,7 +882,9 @@ function addStars() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true })));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, transparent: true }));
+  scene.add(pts);
+  return pts;
 }
 
 // ---------- תוויות ובורר ----------
@@ -807,6 +930,13 @@ for (const body of bodies) {
   galaxyChip.addEventListener('click', () => userSelect(galaxyInfo));
   $('chooser').appendChild(galaxyChip);
   galaxyInfo.chip = galaxyChip;
+  const milkyChip = document.createElement('button');
+  milkyChip.type = 'button';
+  milkyChip.className = 'chip';
+  milkyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌌</span><span>שביל החלב</span>';
+  milkyChip.addEventListener('click', () => userSelect(milkyInfo));
+  $('chooser').appendChild(milkyChip);
+  milkyInfo.chip = milkyChip;
 }
 {
   const chip = document.createElement('button');
@@ -911,6 +1041,10 @@ function flyTo(body, duration = null, pose = null) {
     // מבט מהצד על השבילים: מאונך לכיוון התנועה
     const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
     offset = side.multiplyScalar(-250).add(new THREE.Vector3(0, 30, 0)).multiplyScalar(camera.aspect < 1 ? 1.8 : 1);
+  } else if (body.isMilky) {
+    // מלמעלה ובזווית, כשהצד של השמש קרוב יותר אלינו
+    const toSun = galaxyGroup.position.clone().negate().normalize();
+    offset = GAL_POLE.clone().multiplyScalar(GAL_R * 1.05).addScaledVector(toSun, GAL_R * 0.55).multiplyScalar(camera.aspect < 1 ? 2.1 : 1);
   } else if (body.isComet) {
     // מהצד, כדי לראות את הזנב לכל אורכו
     const out = body.group.position.clone().normalize();
@@ -984,11 +1118,12 @@ function updateViewOffset(dt) {
 
 // ---------- תוויות על המסך ----------
 // סדר עדיפות לתוויות: הכוכב שנבחר, השמש, ואז מהגדול לקטן. תווית שמתנגשת באחרת מוסתרת.
-const labelOrder = () => [...bodies, ...(motionMix > 0.3 ? [] : comets)].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
+const labelOrder = () => [...(milkyMix > 0.3 ? [] : bodies), ...(motionMix > 0.3 || milkyMix > 0.3 ? [] : comets)].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
 
 function updateLabels() {
   const w = window.innerWidth, h = window.innerHeight;
   const placed = [];
+  if (milkyMix > 0.3) for (const b of [...bodies, ...comets]) b.label.style.display = 'none';
   for (const b of labelOrder()) {
     tmp.copy(b.group.position).project(camera);
     if (tmp.z > 1) {
@@ -1392,7 +1527,9 @@ function markActive(body) {
   }
   cometsInfo.chip.classList.toggle('active', body === cometsInfo || !!body?.isComet);
   galaxyInfo.chip.classList.toggle('active', body === galaxyInfo);
+  milkyInfo.chip.classList.toggle('active', body === milkyInfo);
   motionTarget = body === galaxyInfo ? 1 : 0;
+  milkyTarget = body === milkyInfo ? 1 : 0;
 }
 
 const distFmt = new Intl.NumberFormat('he-IL', { maximumFractionDigits: 1 });
@@ -1425,6 +1562,13 @@ $('btn-scale').addEventListener('click', () => {
 
 function showBody(body) {
   if (body === cometsInfo) return showComets();
+  if (body === milkyInfo) {
+    markActive(milkyInfo);
+    presenter.play('open', 2.6);
+    flyTo(milkyInfo, 5);
+    const d = MILKY_WAY;
+    return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+  }
   if (body === galaxyInfo) {
     markActive(galaxyInfo);
     presenter.play('open', 2.6);
@@ -1575,6 +1719,7 @@ const tourSteps = [
   ...bodies.flatMap((body) => (body.data.id === 'mars' ? [{ body }, { body: belt }] : [{ body }])),
   { body: cometsInfo },
   { body: galaxyInfo },
+  { body: milkyInfo },
   { intro: TOUR_OUTRO },
 ];
 let tour = null;
@@ -1858,6 +2003,7 @@ function frame() {
   updateAsteroids();
   updateComets();
   updateGalaxyMotion(dt);
+  updateMilkyWay(dt);
   updateLiveDistance();
   updateCamera(dt);
   controls.update();
