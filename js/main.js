@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, MILKY_WAY } from './data.js';
+import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY } from './data.js';
 import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto, skyTexture } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
@@ -1018,6 +1018,162 @@ function updateMilkyWay(dt) {
   placeMilkyLabel(milky.centreLabel, galaxyGroup.position, 0);
 }
 
+// ---------- חור שחור ----------
+// Gaia BH1, החור השחור הכי קרוב שאנחנו מכירים, בכיוון האמיתי שלו בשמיים (נושא הנחש, עלייה ישרה 262.17°, נטייה ‎-0.58°).
+// הוא מצויר כמו "גרגנטואה" מהסרט "בין כוכבים": לכל פיקסל מחשבים את המסלול של קרן האור סביב החור (לפי תורת היחסות),
+// והקרן פוגעת בטבעת הגז, בכוכב השכן, נבלעת בחור – או בורחת ומראה את השמיים שמאחור, מעוקמים.
+// המרחק והגודל לא בקנה מידה (באמת הוא רחוק פי מאה מיליון מנפטון, וקטן בהרבה מהשמש).
+const BH_DIR = poleVector([262.171, -0.581]);
+const BH_RS = 12; // רדיוס אופק האירועים, ביחידות של התצוגה
+const BH_R = 30; // הרדיוס (באופקי אירועים) של הכדור שבתוכו מחושב העיקום. מחוץ לו האור כמעט ישר
+const blackHoleInfo = { data: BLACK_HOLE, isBlackHole: true, moons: [], group: new THREE.Object3D() };
+let bhMix = 0, bhTarget = 0;
+const blackHole = (() => {
+  const g = blackHoleInfo.group;
+  g.position.copy(BH_DIR).multiplyScalar(2600);
+  // ציר z של החור פונה אלינו (אל השמש), וטבעת הגז במישור xz – כך שבמבט מהשמש רואים אותה כמעט מהצד, כמו בסרט
+  const z = BH_DIR.clone().negate();
+  const x = new THREE.Vector3().crossVectors(UP, z).normalize();
+  g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, new THREE.Vector3().crossVectors(z, x), z));
+  g.scale.setScalar(BH_RS);
+  scene.add(g);
+  const phone = window.innerWidth <= 720 || touchDevice;
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uSky: { value: scene.background },
+      uSkyRot: { value: new THREE.Matrix3() },
+      uToWorld: { value: new THREE.Matrix3() },
+      uCam: { value: new THREE.Vector3() },
+      uStar: { value: new THREE.Vector3() },
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+    },
+    vertexShader: `${LOGDEPTH_V[0]}
+      varying vec3 vPos;
+      void main() {
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        ${LOGDEPTH_V[1]}
+      }`,
+    fragmentShader: `${LOGDEPTH_F[0]}
+      #define STEPS ${phone ? 150 : 260}
+      #define R_OUT ${BH_R.toFixed(1)}
+      #define DISK_IN 2.6
+      #define DISK_OUT 13.0
+      #define STAR_R 0.45
+      uniform samplerCube uSky; uniform mat3 uSkyRot; uniform mat3 uToWorld;
+      uniform vec3 uCam; uniform vec3 uStar; uniform float uTime; uniform float uOpacity;
+      varying vec3 vPos;
+
+      // השמיים שמאחור – בדיוק כמו הרקע של האתר (אותה תמונה ואותו סיבוב)
+      vec3 sky(vec3 d) {
+        d = normalize(uToWorld * d);
+        return textureCube(uSky, uSkyRot * vec3(-d.x, d.y, d.z)).rgb;
+      }
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+      }
+      // טבעת הגז: חמה ובהירה בפנים, כתומה ועמומה בחוץ, עם פסים שמסתובבים מהר יותר ככל שקרובים לחור.
+      // הצד שמתקרב אלינו בהיר וכחלחל יותר, והצד שמתרחק כהה ואדמדם (אפקט דופלר). קרוב לחור האור גם "מאבד אנרגיה" ומאדים.
+      vec4 disk(vec3 q, vec3 dir) {
+        float r = length(q.xz);
+        if (r < DISK_IN || r > DISK_OUT) return vec4(0.0);
+        float spin = mod(uTime * 1.6 * pow(r, -1.5), 6.2831853);
+        vec2 uv = mat2(cos(spin), -sin(spin), sin(spin), cos(spin)) * q.xz;
+        float a = atan(uv.y, uv.x);
+        float n = noise(vec2(r * 3.0, a * 2.0)) * 0.5 + noise(vec2(r * 9.0, a * 3.0)) * 0.3 + noise(vec2(r * 26.0, a * 1.5)) * 0.2;
+        float band = 0.82 + 0.18 * sin(r * 4.0 + n * 6.0);
+        float edge = smoothstep(DISK_IN, DISK_IN + 0.5, r) * (1.0 - smoothstep(DISK_OUT * 0.55, DISK_OUT, r));
+        float t = pow(DISK_IN / r, 1.6);
+        vec3 col = mix(vec3(1.0, 0.36, 0.08), vec3(1.0, 0.86, 0.6), t);
+        vec3 vel = normalize(vec3(-q.z, 0.0, q.x)) * sqrt(0.5 / r);
+        float beta = length(vel);
+        float dop = 1.0 / (sqrt(1.0 - beta * beta) * (1.0 + dot(vel, dir)));
+        float shift = clamp(dop * sqrt(1.0 - 1.0 / r), 0.35, 1.8);
+        col *= mix(vec3(1.25, 0.8, 0.6), vec3(0.85, 0.95, 1.25), smoothstep(0.7, 1.4, shift));
+        float lum = (0.4 + 1.5 * t) * (0.45 + 0.75 * n) * band * pow(shift, 2.2);
+        return vec4(col * lum, clamp(edge * (0.55 + 0.45 * n) * 1.15, 0.0, 0.97));
+      }
+
+      void main() {
+        ${LOGDEPTH_F[1]}
+        vec3 dir = normalize(vPos - uCam);
+        vec3 p = uCam;
+        if (dot(p, p) > R_OUT * R_OUT) {
+          float b = dot(p, dir), c = dot(p, p) - R_OUT * R_OUT, h = b * b - c;
+          if (h < 0.0) discard;
+          p += dir * (-b - sqrt(h));
+        }
+        vec3 v = dir;
+        float h2 = dot(cross(p, v), cross(p, v));
+        // ליד שפת הכדור הקרניים כמעט לא מתעקמות – מחליקים אל הכיוון הישר, כדי שלא יהיה "תפר" עם הרקע
+        float edgeK = smoothstep(0.75 * R_OUT, 0.98 * R_OUT, sqrt(h2));
+        vec3 col = vec3(0.0);
+        float trans = 1.0;
+        bool fell = false;
+        for (int i = 0; i < STEPS; i++) {
+          float r2 = dot(p, p), r = sqrt(r2);
+          if (r < 1.0) { fell = true; break; }
+          float dt = ${phone ? '0.06' : '0.045'} * r; // בטלפון צעדים גדולים יותר – פחות חישוב
+          v += -1.5 * h2 * p / (r2 * r2 * r) * dt;
+          vec3 pn = p + v * dt;
+          // הכוכב השכן (דמוי שמש): גם האור שלו מתעקם, ולפעמים רואים אותו פעמיים
+          vec3 ds = p - uStar, seg = pn - p;
+          float s = clamp(-dot(ds, seg) / dot(seg, seg), 0.0, 1.0);
+          float dStar = length(ds + seg * s);
+          col += trans * vec3(1.0, 0.85, 0.55) * exp(-dStar * dStar * 3.0) * length(seg) * 0.35;
+          if (dStar < STAR_R) { col += trans * vec3(1.6, 1.35, 0.95); trans = 0.0; break; }
+          if (p.y * pn.y < 0.0) {
+            vec3 q = mix(p, pn, p.y / (p.y - pn.y));
+            vec4 d = disk(q, normalize(v));
+            col += trans * d.rgb * d.a;
+            trans *= 1.0 - d.a;
+            if (trans < 0.02) break;
+          }
+          p = pn;
+          if (dot(p, p) > R_OUT * R_OUT && dot(p, v) > 0.0) break;
+        }
+        if (!fell && trans > 0.0) col += trans * sky(normalize(mix(v, dir, edgeK)));
+        gl_FragColor = vec4(col, uOpacity);
+        #include <colorspace_fragment>
+      }`,
+    side: THREE.BackSide,
+    transparent: true,
+    depthWrite: true,
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(BH_R, 64, 32), mat);
+  mesh.visible = false;
+  mesh.frustumCulled = false;
+  g.add(mesh);
+  return { mesh, mat };
+})();
+
+const bhTmp = new THREE.Matrix4();
+const bhEuler = new THREE.Euler();
+function updateBlackHole(dt) {
+  if (bhMix !== bhTarget) bhMix = bhTarget > bhMix ? Math.min(1, bhMix + dt / 2) : Math.max(0, bhMix - dt / 1.5);
+  blackHole.mesh.visible = bhMix > 0.001;
+  if (!blackHole.mesh.visible) return;
+  const u = blackHole.mat.uniforms;
+  const t = performance.now() / 1000;
+  u.uOpacity.value = bhMix;
+  u.uTime.value = t;
+  blackHole.mesh.updateMatrixWorld();
+  u.uCam.value.copy(camera.position);
+  blackHole.mesh.worldToLocal(u.uCam.value);
+  u.uToWorld.value.setFromMatrix4(blackHole.mesh.matrixWorld).multiplyScalar(1 / BH_RS);
+  // אותו סיבוב שבו three.js מסובב את תמונת הרקע
+  const r = scene.backgroundRotation;
+  bhEuler.set(-r.x, r.y, r.z, r.order);
+  u.uSkyRot.value.setFromMatrix4(bhTmp.makeRotationFromEuler(bhEuler));
+  // הכוכב השכן מקיף את החור (באמת פעם בחצי שנה, ובמרחק גדול בהרבה)
+  const a = t * 0.35;
+  u.uStar.value.set(Math.cos(a) * 19, Math.sin(a) * 2.5, Math.sin(a) * 19);
+}
+
 function createBody(data, isSun) {
   const group = new THREE.Group();
   // ציר הסיבוב מכוון לכיוון האמיתי של הקוטב הצפוני (כך העונות בכדור הארץ נכונות)
@@ -1212,6 +1368,13 @@ for (const body of bodies) {
   galaxyChip.addEventListener('click', () => userSelect(galaxyInfo));
   $('chooser').appendChild(galaxyChip);
   galaxyInfo.chip = galaxyChip;
+  const bhChip = document.createElement('button');
+  bhChip.type = 'button';
+  bhChip.className = 'chip';
+  bhChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">⚫</span><span>חור שחור</span>';
+  bhChip.addEventListener('click', () => userSelect(blackHoleInfo));
+  $('chooser').appendChild(bhChip);
+  blackHoleInfo.chip = bhChip;
   const milkyChip = document.createElement('button');
   milkyChip.type = 'button';
   milkyChip.className = 'chip';
@@ -1323,6 +1486,11 @@ function flyTo(body, duration = null, pose = null) {
     // מבט מהצד על השבילים: מאונך לכיוון התנועה
     const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
     offset = side.multiplyScalar(-250).add(new THREE.Vector3(0, 30, 0)).multiplyScalar(camera.aspect < 1 ? 1.8 : 1);
+  } else if (body.isBlackHole) {
+    // מהצד של השמש, קצת מעל טבעת הגז – כמו הצילום המפורסם מהסרט
+    const z = BH_DIR.clone().negate();
+    offset = z.multiplyScalar(50 * BH_RS).addScaledVector(body.group.up.clone().applyQuaternion(body.group.quaternion), 0.9 * BH_RS);
+    if (camera.aspect < 1) offset.multiplyScalar(1.35);
   } else if (body.isMilky) {
     // מלמעלה ובזווית, כשהצד של השמש קרוב יותר אלינו
     const toSun = galaxyGroup.position.clone().negate().normalize();
@@ -1810,6 +1978,8 @@ function markActive(body) {
   cometsInfo.chip.classList.toggle('active', body === cometsInfo || !!body?.isComet);
   galaxyInfo.chip.classList.toggle('active', body === galaxyInfo);
   milkyInfo.chip.classList.toggle('active', body === milkyInfo);
+  blackHoleInfo.chip.classList.toggle('active', body === blackHoleInfo);
+  bhTarget = body === blackHoleInfo ? 1 : 0;
   motionTarget = body === galaxyInfo ? 1 : 0;
   if (body === milkyInfo && milkyMix === 0) milky.holder.rotation.y = Math.PI / 2; // השמש מתחילה במקום האמיתי שלה
   milkyTarget = body === milkyInfo ? 1 : 0;
@@ -1850,6 +2020,13 @@ function showBody(body) {
     presenter.play('open', 2.6);
     flyTo(milkyInfo, 5);
     const d = MILKY_WAY;
+    return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+  }
+  if (body === blackHoleInfo) {
+    markActive(blackHoleInfo);
+    presenter.play('open', 2.6);
+    flyTo(blackHoleInfo, 4);
+    const d = BLACK_HOLE;
     return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
   }
   if (body === galaxyInfo) {
@@ -2002,6 +2179,7 @@ const tourSteps = [
   ...bodies.flatMap((body) => (body.data.id === 'mars' ? [{ body }, { body: belt }] : [{ body }])),
   { body: cometsInfo },
   { body: galaxyInfo },
+  { body: blackHoleInfo },
   { body: milkyInfo },
   { intro: TOUR_OUTRO },
 ];
@@ -2287,6 +2465,7 @@ function frame() {
   updateComets();
   updateGalaxyMotion(dt);
   updateMilkyWay(dt);
+  updateBlackHole(dt);
   updateLiveDistance();
   updateCamera(dt);
   controls.update();
