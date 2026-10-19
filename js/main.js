@@ -534,7 +534,7 @@ function initGalaxyMotion() {
   galaxyInfo.label.textContent = 'כיוון התנועה של מערכת השמש';
   galaxyInfo.label.style.display = 'none';
   $('labels').appendChild(galaxyInfo.label);
-  galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-70);
+  galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-44);
 }
 
 const motionTmp = new THREE.Vector3();
@@ -609,8 +609,11 @@ function updateGalaxyMotion(dt) {
   const show = motionTmp.z < 1 && motionMix > 0.5;
   galaxyInfo.label.style.display = show ? '' : 'none';
   if (show) {
-    galaxyInfo.label.style.transform =
-      `translate(-50%, 0) translate(${(motionTmp.x * 0.5 + 0.5) * innerWidth}px, ${(-motionTmp.y * 0.5 + 0.5) * innerHeight}px)`;
+    // התווית נשארת באזור הפנוי: לא מתחת לכפתורים בראש המסך ולא מעל חלון ההסבר
+    const lw = galaxyInfo.label.offsetWidth || 200;
+    const lx = Math.min(Math.max((motionTmp.x * 0.5 + 0.5) * innerWidth, lw / 2 + 8), innerWidth - lw / 2 - 8);
+    const ly = Math.min(Math.max((-motionTmp.y * 0.5 + 0.5) * innerHeight, 112), innerHeight - 130);
+    galaxyInfo.label.style.transform = `translate(-50%, 0) translate(${lx}px, ${ly}px)`;
   }
 }
 const smoothstep01 = (t) => t * t * (3 - 2 * t);
