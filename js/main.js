@@ -134,8 +134,8 @@ const bodyById = Object.fromEntries(bodies.map((b) => [b.data.id, b]));
 const comets = COMETS.map(createComet);
 
 // טקסטורות מפורטות נוצרות ברקע ומחליפות את הגרסה הקטנה, כוכב אחרי כוכב
-// השמש, נוגה ופלוטו מחושבים; לשאר יש מפות אמיתיות (ואם תמונה לא נטענת – מחשבים גם אותה)
-loadDetailed(['sun', 'venus', 'pluto'], applyDetailed);
+// נוגה ופלוטו מחושבים; לשמש ולשאר יש מפות אמיתיות (ואם תמונה לא נטענת – מחשבים גם אותה)
+loadDetailed(['venus', 'pluto'], applyDetailed);
 loadPhotos(applyDetailed, (id) => loadDetailed([id], applyDetailed));
 function applyDetailed(id, map, bump) {
   const mat = bodyById[id]?.mesh.material;
