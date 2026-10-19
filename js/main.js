@@ -952,6 +952,8 @@ const milky = (() => {
     disk.material.map = paintHaze(gal);
     disk.material.needsUpdate = true;
     skyDome.material.map = paintSky(gal);
+    skyDome.material.map.generateMipmaps = false;
+    skyDome.material.map.minFilter = THREE.LinearFilter;
     skyDome.material.needsUpdate = true;
   };
   return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
@@ -969,9 +971,9 @@ function updateMilkyWay(dt) {
   if (milkyMix !== milkyTarget) {
     milkyMix = milkyTarget > milkyMix ? Math.min(1, milkyMix + dt / 2.5) : Math.max(0, milkyMix - dt / 1.5);
   }
-  if (milkyTarget || motionTarget) milky.load();
-  // בתחנה "טסים בחלל" שביל החלב שברקע הוא הגלקסיה מהקוד, כפי שהיא נראית מבפנים (במקום הצילום)
-  const inside = motionMix * (1 - milkyMix);
+  if (milkyTarget || motionTarget || bhTarget) milky.load();
+  // בתחנות "טסים בחלל" ו"חור שחור" שביל החלב שברקע הוא הגלקסיה מהקוד, כפי שהיא נראית מבפנים (במקום הצילום)
+  const inside = Math.max(motionMix, bhMix) * (1 - milkyMix);
   milky.skyDome.visible = inside > 0.001;
   milky.skyDome.material.opacity = inside * 0.55;
   const on = milkyMix > 0.001;
@@ -991,7 +993,7 @@ function updateMilkyWay(dt) {
   // מבחוץ מערכת השמש קטנה מנקודה – מסתירים את הגופים עצמם (הסימון "אנחנו כאן" מראה איפה היא)
   for (const b of bodies) b.group.visible = milkyMix < 0.5;
   // מחוץ לגלקסיה אין כוכבים קרובים מסביב – הרקע שחור לגמרי
-  scene.backgroundIntensity = (1 - milkyMix) * (1 - motionMix);
+  scene.backgroundIntensity = (1 - milkyMix) * (1 - Math.max(motionMix, bhMix));
   starField.material.opacity = 1 - milkyMix;
   controls.maxDistance = on || followBody === milkyInfo ? 60000 : 8000;
   if (!on) {
@@ -1025,23 +1027,24 @@ function updateMilkyWay(dt) {
 // המרחק והגודל לא בקנה מידה (באמת הוא רחוק פי מאה מיליון מנפטון, וקטן בהרבה מהשמש).
 const BH_DIR = poleVector([262.171, -0.581]);
 const BH_RS = 12; // רדיוס אופק האירועים, ביחידות של התצוגה
-const BH_R = 30; // הרדיוס (באופקי אירועים) של הכדור שבתוכו מחושב העיקום. מחוץ לו האור כמעט ישר
+const BH_R = 80; // הרדיוס (באופקי אירועים) של הכדור שבתוכו מחושב העיקום. המצלמה בתוכו, כך שכל השמיים שרואים מעוקמים
 const blackHoleInfo = { data: BLACK_HOLE, isBlackHole: true, moons: [], group: new THREE.Object3D() };
 let bhMix = 0, bhTarget = 0;
 const blackHole = (() => {
   const g = blackHoleInfo.group;
   g.position.copy(BH_DIR).multiplyScalar(2600);
-  // ציר z של החור פונה אלינו (אל השמש), וטבעת הגז במישור xz – כך שבמבט מהשמש רואים אותה כמעט מהצד, כמו בסרט
-  const z = BH_DIR.clone().negate();
-  const x = new THREE.Vector3().crossVectors(UP, z).normalize();
-  g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, new THREE.Vector3().crossVectors(z, x), z));
+  // מסתכלים על החור לכיוון מרכז הגלקסיה, כך ששביל החלב והמרכז הבהיר שלו נמצאים בדיוק מאחוריו.
+  // ציר z של החור פונה אל המצלמה, וטבעת הגז (במישור xz) אופקית על המסך, כמו בסרט. שביל החלב חוצה את המסך באלכסון
+  const z = GAL_CENTRE_DIR.clone().negate();
+  const y = UP.clone().projectOnPlane(z).normalize();
+  g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(y, z), y, z));
   g.scale.setScalar(BH_RS);
   scene.add(g);
   const phone = window.innerWidth <= 720 || touchDevice;
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uSky: { value: scene.background },
-      uSkyRot: { value: new THREE.Matrix3() },
+      uDome: { value: null },
+      uDomeRot: { value: new THREE.Matrix3() },
       uToWorld: { value: new THREE.Matrix3() },
       uCam: { value: new THREE.Vector3() },
       uStar: { value: new THREE.Vector3() },
@@ -1061,16 +1064,28 @@ const blackHole = (() => {
       #define DISK_IN 2.6
       #define DISK_OUT 13.0
       #define STAR_R 0.45
-      uniform samplerCube uSky; uniform mat3 uSkyRot; uniform mat3 uToWorld;
+      uniform sampler2D uDome; uniform mat3 uDomeRot; uniform mat3 uToWorld;
       uniform vec3 uCam; uniform vec3 uStar; uniform float uTime; uniform float uOpacity;
       varying vec3 vPos;
 
-      // השמיים שמאחור – בדיוק כמו הרקע של האתר (אותה תמונה ואותו סיבוב)
-      vec3 sky(vec3 d) {
-        d = normalize(uToWorld * d);
-        return textureCube(uSky, uSkyRot * vec3(-d.x, d.y, d.z)).rgb;
-      }
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float hash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      // השמיים שמאחור: שביל החלב מהקוד (אותה מפה שמצוירת על הכדור הגדול בתחנה "טסים בחלל"),
+      // ועוד כוכבים קטנים וחדים – גם הם מתעקמים יחד עם השמיים
+      vec3 sky(vec3 d) {
+        d = normalize(uDomeRot * normalize(uToWorld * d));
+        vec2 uv = vec2(atan(d.z, -d.x) / 6.2831853 + 0.5, 1.0 - acos(clamp(d.y, -1.0, 1.0)) / 3.1415927);
+        uv.x = fract(uv.x - 0.5);
+        vec3 c = texture2D(uDome, uv).rgb * 0.32;
+        vec3 q = d * 260.0, cell = floor(q);
+        float h = hash3(cell);
+        if (h > 0.93) {
+          vec3 sp = cell + 0.5 + 0.3 * (vec3(hash3(cell + 1.3), hash3(cell + 2.7), hash3(cell + 4.1)) - 0.5);
+          float k = smoothstep(0.32, 0.0, length(q - sp));
+          c += k * (h - 0.93) * 14.0 * mix(vec3(1.0, 0.85, 0.7), vec3(0.75, 0.85, 1.0), hash3(cell + 7.7));
+        }
+        return c;
+      }
       float noise(vec2 p) {
         vec2 i = floor(p), f = fract(p);
         f = f * f * (3.0 - 2.0 * f);
@@ -1152,7 +1167,6 @@ const blackHole = (() => {
 })();
 
 const bhTmp = new THREE.Matrix4();
-const bhEuler = new THREE.Euler();
 function updateBlackHole(dt) {
   if (bhMix !== bhTarget) bhMix = bhTarget > bhMix ? Math.min(1, bhMix + dt / 2) : Math.max(0, bhMix - dt / 1.5);
   blackHole.mesh.visible = bhMix > 0.001;
@@ -1165,10 +1179,9 @@ function updateBlackHole(dt) {
   u.uCam.value.copy(camera.position);
   blackHole.mesh.worldToLocal(u.uCam.value);
   u.uToWorld.value.setFromMatrix4(blackHole.mesh.matrixWorld).multiplyScalar(1 / BH_RS);
-  // אותו סיבוב שבו three.js מסובב את תמונת הרקע
-  const r = scene.backgroundRotation;
-  bhEuler.set(-r.x, r.y, r.z, r.order);
-  u.uSkyRot.value.setFromMatrix4(bhTmp.makeRotationFromEuler(bhEuler));
+  // מפת השמיים של שביל החלב, והסיבוב מכיוון בעולם לכיוון על המפה (ההפך מהסיבוב של הכדור הגדול)
+  u.uDome.value = milky.skyDome.material.map;
+  u.uDomeRot.value.setFromMatrix4(bhTmp.makeRotationFromQuaternion(milky.skyDome.quaternion).transpose());
   // הכוכב השכן מקיף את החור (באמת פעם בחצי שנה, ובמרחק גדול בהרבה)
   const a = t * 0.35;
   u.uStar.value.set(Math.cos(a) * 19, Math.sin(a) * 2.5, Math.sin(a) * 19);
@@ -1488,8 +1501,8 @@ function flyTo(body, duration = null, pose = null) {
     offset = side.multiplyScalar(-250).add(new THREE.Vector3(0, 30, 0)).multiplyScalar(camera.aspect < 1 ? 1.8 : 1);
   } else if (body.isBlackHole) {
     // מהצד של השמש, קצת מעל טבעת הגז – כמו הצילום המפורסם מהסרט
-    const z = BH_DIR.clone().negate();
-    offset = z.multiplyScalar(50 * BH_RS).addScaledVector(body.group.up.clone().applyQuaternion(body.group.quaternion), 0.9 * BH_RS);
+    const z = GAL_CENTRE_DIR.clone().negate();
+    offset = z.multiplyScalar(50 * BH_RS).addScaledVector(body.group.up.clone().applyQuaternion(body.group.quaternion), 1.6 * BH_RS);
     if (camera.aspect < 1) offset.multiplyScalar(1.35);
   } else if (body.isMilky) {
     // מלמעלה ובזווית, כשהצד של השמש קרוב יותר אלינו
