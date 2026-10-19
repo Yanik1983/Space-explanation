@@ -681,10 +681,10 @@ const milky = (() => {
 
   // הכוכבים מנצנצים, ומדי פעם כוכב מתלקח לרגע. שכבת האבק מציירת בצבע כהה (לא מוסיפה אור) ומסתירה חלק מהכוכבים.
   const pointsMaterial = (dust) => new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uScale: { value: 1 } },
+    uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uScale: { value: 1 }, uMaxPx: { value: 1e4 }, uNear: { value: 0 } },
     vertexShader: `${LOGDEPTH_V[0]}
       attribute float size; attribute float phase; attribute float flare;
-      uniform float uTime; uniform float uScale;
+      uniform float uTime; uniform float uScale; uniform float uMaxPx; uniform float uNear;
       varying vec3 vColor; varying float vAlpha;
       void main() {
         vColor = color;
@@ -692,7 +692,9 @@ const milky = (() => {
         float burst = flare * pow(max(0.0, sin(uTime * 0.35 + phase * 40.0)), 60.0);
         vAlpha = tw + 3.0 * burst;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = max(1.0, size * (1.0 + 2.5 * burst) * uScale / -mv.z);
+        // מבפנים (uNear > 0) כוכבים קרובים מדי נעלמים, והגודל מוגבל – כדי שלא יהיו כתמים ענקיים
+        vAlpha *= smoothstep(uNear, uNear * 2.0, -mv.z);
+        gl_PointSize = clamp(size * (1.0 + 2.5 * burst) * uScale / -mv.z, 1.0, uMaxPx);
         gl_Position = projectionMatrix * mv;
         ${LOGDEPTH_V[1]}
       }`,
@@ -849,7 +851,77 @@ const milky = (() => {
     return tex;
   }
 
-  // הגלקסיה נבנית רק כשמגיעים לתחנה בפעם הראשונה (בזמן שהמצלמה טסה החוצה)
+  // השמיים מבפנים (בתחנה "טסים בחלל"): אותה גלקסיה בדיוק, כפי שהיא נראית מהמקום של השמש.
+  // כל כוכב מצויר על כדור ענק סביבנו, בכיוון שבו הוא נמצא – וכך הזרועות, המרכז והאבק הופכים לפס של שביל החלב.
+  const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(40000, 64, 32),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }),
+  );
+  // הכדור מסובב כמו holder במנוחה, כך שהפס נמצא בכיוון האמיתי שלו בשמיים
+  skyDome.quaternion.copy(g.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(UP, Math.PI / 2));
+  skyDome.visible = false;
+  skyDome.renderOrder = -1;
+  skyDome.frustumCulled = false;
+  scene.add(skyDome);
+
+  // הציור נעשה ישירות על מערך של מספרים ולא עם הצבעים המדורגים של הקנבס: הדפדפן מוסיף להם "רעש" זעיר,
+  // ואחרי אלפי כתמים הרעש מצטבר לרשת שנראית בבירור
+  function paintSky({ stars, dust }) {
+    const W = 1024, H = W / 2;
+    const buf = new Float32Array(W * H * 3);
+    const shade = new Float32Array(W * H).fill(1);
+    // כתם רך: (1 - מרחק²)², כולל מעבר בין קצה שמאל לקצה ימין של המפה
+    const splat = (px, py, rad, fn) => {
+      const r2 = rad * rad;
+      for (let y = Math.max(0, Math.floor(py - rad)); y <= Math.min(H - 1, Math.ceil(py + rad)); y++) {
+        for (let xx = Math.floor(px - rad); xx <= Math.ceil(px + rad); xx++) {
+          const q = ((xx - px) ** 2 + (y - py) ** 2) / r2;
+          if (q >= 1) continue;
+          fn(y * W + ((xx % W) + W) % W, (1 - q) * (1 - q));
+        }
+      }
+    };
+    // הדיסק בקוד דק מאוד (כדי שמבחוץ ייראה חד), ולכן כאן מעבים אותו קצת – כמו שהפס נראה בשמיים האמיתיים.
+    // כיוון (מהשמש) → נקודה במפה, באותה צורה שבה SphereGeometry פורש את התמונה על הכדור
+    const each = (bag, step, thick, near, maxRad, draw) => {
+      for (let i = 0; i < bag.size.length; i += step) {
+        const x = bag.pos[i * 3], y = bag.pos[i * 3 + 1] * thick, z = bag.pos[i * 3 + 2] - R0;
+        const d = Math.hypot(x, y, z);
+        if (d < near) continue;
+        const u = ((Math.atan2(z, -x) / (2 * Math.PI)) % 1 + 1) % 1;
+        // כוכבים קרובים נראים גדולים יותר
+        draw(i, u * W, (Math.acos(y / d) / Math.PI) * H, Math.min(maxRad, Math.max(3, (2 * R0) / d)));
+      }
+    };
+    // בטלפון יש פחות כוכבים, ולכן כל אחד מצויר קצת יותר בהיר. ליד המרכז הכוכבים צפופים מאוד – מחלישים אותם קצת
+    const bright = 60000 / stars.size.length;
+    const starSplat = (a) => (i, px, py, rad) => {
+      const k = a * bright * (Math.hypot(stars.pos[i * 3], stars.pos[i * 3 + 2]) < 0.35 * R0 ? 0.45 : 1);
+      const r = stars.col[i * 3] * k, g = stars.col[i * 3 + 1] * k, b = stars.col[i * 3 + 2] * k;
+      splat(px, py, rad, (p, f) => { buf[p * 3] += r * f; buf[p * 3 + 1] += g * f; buf[p * 3 + 2] += b * f; });
+    };
+    each(stars, 1, 3, 1, 8, starSplat(0.09));
+    // ועוד שכבת זוהר רכה ורחבה, כדי שהפס ייראה כמו ענן ולא רק כמו נקודות
+    each(stars, 4, 3, 1, 8, (i, px, py, rad) => starSplat(0.016)(i, px, py, rad * 4));
+    // האבק הכהה יוצר את "הסדק" שרואים באמצע הפס
+    each(dust, 1, 7, 0.25 * R0, 6, (i, px, py, rad) => splat(px, py, rad * 1.3, (p, f) => { shade[p] *= 1 - 0.12 * f; }));
+    // מספרים → צבעים, בלי "שריפה" של האזורים הבהירים
+    const cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(W, H);
+    for (let p = 0; p < W * H; p++) {
+      for (let c = 0; c < 3; c++) img.data[p * 4 + c] = 255 * (1 - Math.exp(-buf[p * 3 + c] * Math.max(0.3, shade[p])));
+      img.data[p * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  // הגלקסיה נבנית רק כשמגיעים לאחת התחנות שלה בפעם הראשונה
   const load = () => {
     if (disk.material.map) return;
     const gal = buildGalaxy();
@@ -858,8 +930,10 @@ const milky = (() => {
     // שורה 0 בקנבס היא הקצה העליון של המשטח, שאחרי הסיבוב שלו נמצא ב־z שלילי של holder – בדיוק כמו ב־toPx
     disk.material.map = paintHaze(gal);
     disk.material.needsUpdate = true;
+    skyDome.material.map = paintSky(gal);
+    skyDome.material.needsUpdate = true;
   };
-  return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
+  return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, skyDome, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -874,13 +948,29 @@ function updateMilkyWay(dt) {
   if (milkyMix !== milkyTarget) {
     milkyMix = milkyTarget > milkyMix ? Math.min(1, milkyMix + dt / 2.5) : Math.max(0, milkyMix - dt / 1.5);
   }
-  if (milkyTarget) milky.load();
+  if (milkyTarget || motionTarget) milky.load();
+  // בתחנה "טסים בחלל" שביל החלב שברקע הוא הגלקסיה מהקוד, כפי שהיא נראית מבפנים (במקום הצילום)
+  const inside = motionMix * (1 - milkyMix);
+  milky.skyDome.visible = inside > 0.001;
+  milky.skyDome.material.opacity = inside * 0.55;
   const on = milkyMix > 0.001;
   for (const o of [milky.disk, milky.core, milky.here, milky.starPoints, milky.dustPoints]) o.visible = on;
+  if (!on && inside > 0.001) {
+    // גם הכוכבים עצמם של הגלקסיה נראים מבפנים: הגלקסיה חוזרת למקום שבו השמש נמצאת בדיוק אצלנו
+    milky.holder.rotation.y = Math.PI / 2;
+    milky.starPoints.visible = true;
+    milky.dustPoints.visible = false;
+    const m = milky.starsMat.uniforms;
+    m.uOpacity.value = inside * 0.4;
+    m.uTime.value = performance.now() / 1000;
+    m.uScale.value = (renderer.domElement.height / 2) / Math.tan((camera.fov * DEG) / 2);
+    m.uMaxPx.value = 2 * renderer.getPixelRatio();
+    m.uNear.value = 0.04 * GAL_SUN_R;
+  }
   // מבחוץ מערכת השמש קטנה מנקודה – מסתירים את הגופים עצמם (הסימון "אנחנו כאן" מראה איפה היא)
   for (const b of bodies) b.group.visible = milkyMix < 0.5;
   // מחוץ לגלקסיה אין כוכבים קרובים מסביב – הרקע שחור לגמרי
-  scene.backgroundIntensity = 1 - milkyMix;
+  scene.backgroundIntensity = (1 - milkyMix) * (1 - motionMix);
   starField.material.opacity = 1 - milkyMix;
   controls.maxDistance = on || followBody === milkyInfo ? 60000 : 8000;
   if (!on) {
@@ -894,6 +984,8 @@ function updateMilkyWay(dt) {
   const glowK = bloomOn ? 0.45 : 1;
   milky.disk.material.opacity = milkyMix * 0.9 * glowK;
   for (const m of [milky.starsMat, milky.dustMat]) {
+    m.uniforms.uMaxPx.value = 1e4;
+    m.uniforms.uNear.value = 0;
     m.uniforms.uOpacity.value = milkyMix;
     m.uniforms.uTime.value = t;
     m.uniforms.uScale.value = (renderer.domElement.height / 2) / Math.tan((camera.fov * DEG) / 2);
