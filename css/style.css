@@ -401,7 +401,7 @@ body.term-open #panel { visibility: hidden; }
   body.panel-open .timebar { display: none; }
   .chooser { justify-content: flex-start; }
   .chip { min-width: 58px; font-size: 12px; }
-  .presenter { width: 120px; height: 135px; }
+  .presenter { width: 150px; height: 135px; }
   .hide-phone { display: none; }
 }
 

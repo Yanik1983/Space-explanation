@@ -69,7 +69,7 @@ export class Presenter {
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.45;
     this.camera = new THREE.PerspectiveCamera(30, 1, 0.05, 20);
-    this.camera.position.set(0.03, 1.0, 1.95);
+    this.camera.position.set(0.03, 1.0, 2.15);
     this.camera.lookAt(0.03, 0.96, 0);
 
     // תאורה: אור מפתח חם, מילוי רך וקריר, ושני אורות קצה מאחור שמפרידים את הדמות מהחלל
@@ -513,9 +513,9 @@ export class Presenter {
       if (g === 'wave' && s === 1) {
         az = 14 * D; ax = -30 * D; e = 0; ey = 0; ez = (58 + Math.sin(t * 8) * 18) * D; curl = 0.04;
       } else if (g === 'point' && s === Math.sign(lookSide || -1)) {
-        az = -s * 40 * D; ax = -75 * D; e = 0; ey = 0; ez = 0; curl = 0.12;
+        az = -s * 64 * D; ax = -56 * D; e = -62 * D; ey = s * 0.5; ez = 0; curl = 0.12;
       } else if (g === 'open') {
-        az = -s * 55 * D; ax = -30 * D; e = -55 * D; ey = s * 0.3; ez = 0; curl = 0.1;
+        az = -s * 66 * D; ax = -30 * D; e = -62 * D; ey = s * 0.1; ez = 0; curl = 0.1;
       }
       arm.az += (az - arm.az) * k(6);
       arm.ax += (ax - arm.ax) * k(6);
