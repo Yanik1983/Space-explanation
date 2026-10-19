@@ -40,7 +40,8 @@ export function loadDetailed(ids, onReady) {
   const queue = ids.filter((id) => SIZES[id]);
   let worker = null;
   try {
-    worker = new Worker(new URL('./texture-worker.js', import.meta.url), { type: 'module' });
+    // ה־Worker לא רואה את מפת הייבוא של הדף, ולכן מעבירים לו את מספר הגרסה בעצמנו
+    worker = new Worker(new URL(`./texture-worker.js${new URL(import.meta.url).search}`, import.meta.url), { type: 'module' });
   } catch {
     return; // דפדפן ישן: נשארים עם הגרסה הקטנה
   }
