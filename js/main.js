@@ -680,7 +680,7 @@ const milky = (() => {
   holder.add(sunAnchor);
 
   // הכוכבים מנצנצים, ומדי פעם כוכב מתלקח לרגע. שכבת האבק מציירת בצבע כהה (לא מוסיפה אור) ומסתירה חלק מהכוכבים.
-  const pointsMaterial = (dust) => new THREE.ShaderMaterial({
+  const pointsMaterial = (dust, steady = false) => new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uScale: { value: 1 }, uMaxPx: { value: 1e4 }, uNear: { value: 0 } },
     vertexShader: `${LOGDEPTH_V[0]}
       attribute float size; attribute float phase; attribute float flare;
@@ -688,7 +688,7 @@ const milky = (() => {
       varying vec3 vColor; varying float vAlpha;
       void main() {
         vColor = color;
-        float tw = ${dust ? '1.0' : '0.6 + 0.4 * sin(uTime * (1.2 + fract(phase * 7.3) * 2.5) + phase * 6.2831)'};
+        float tw = ${dust || steady ? '1.0' : '0.6 + 0.4 * sin(uTime * (1.2 + fract(phase * 7.3) * 2.5) + phase * 6.2831)'};
         float burst = flare * pow(max(0.0, sin(uTime * 0.35 + phase * 40.0)), 60.0);
         vAlpha = tw + 3.0 * burst;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -714,9 +714,12 @@ const milky = (() => {
   });
   const starsMat = pointsMaterial(false);
   const dustMat = pointsMaterial(true);
+  // זוהר רך ותלת ממדי: כתמים גדולים וחלשים שנראים גם כשמסתכלים על הגלקסיה מהצד (שכבת הזוהר השטוחה נעלמת אז)
+  const glowMat = pointsMaterial(false, true);
+  const glowPoints = new THREE.Points(new THREE.BufferGeometry(), glowMat);
   const starPoints = new THREE.Points(new THREE.BufferGeometry(), starsMat);
   const dustPoints = new THREE.Points(new THREE.BufferGeometry(), dustMat);
-  for (const [o, order] of [[starPoints, 1], [dustPoints, 2]]) {
+  for (const [o, order] of [[glowPoints, 0], [starPoints, 1], [dustPoints, 2]]) {
     o.frustumCulled = false;
     o.visible = false;
     o.renderOrder = order;
@@ -762,23 +765,29 @@ const milky = (() => {
     };
     for (let n = 0; n < N; n++) {
       const kind = Math.random();
-      if (kind < 0.08) {
-        // הבליטה: כדור פחוס של כוכבים זקנים וצהבהבים
-        const r = Math.abs(gauss()) * 0.16 * R0;
+      if (kind < 0.1) {
+        // הבליטה: "ביצה" תפוחה של כוכבים זקנים וצהבהבים, בעובי של בערך 10,000 שנות אור
+        const r = Math.abs(gauss()) * 0.22 * R0;
         const u = Math.random() * 2 - 1, phi = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
-        put(stars, s * Math.cos(phi) * r, u * r * 0.6, s * Math.sin(phi) * r, tmp.copy(COL.bulge), 30 + Math.random() * 40, 0.75 + Math.random() * 0.4);
-      } else if (kind < 0.19) {
+        put(stars, s * Math.cos(phi) * r, u * r * 0.8, s * Math.sin(phi) * r, tmp.copy(COL.bulge), 30 + Math.random() * 40, 0.75 + Math.random() * 0.4);
+      } else if (kind < 0.2) {
         // המוט
         const t = (Math.random() * 2 - 1) * BAR_LEN * (0.35 + 0.65 * Math.random()), wdt = gauss() * 0.11 * BAR_LEN;
         const x = -Math.sin(BAR_ANGLE) * t + Math.cos(BAR_ANGLE) * wdt;
         const z = Math.cos(BAR_ANGLE) * t + Math.sin(BAR_ANGLE) * wdt;
-        put(stars, x, gauss() * 0.035 * R0, z, tmp.copy(COL.bar), 30 + Math.random() * 40, 0.85 + Math.random() * 0.4);
-      } else if (kind < 0.37) {
+        put(stars, x, gauss() * 0.06 * R0, z, tmp.copy(COL.bar), 30 + Math.random() * 40, 0.85 + Math.random() * 0.4);
+      } else if (kind < 0.34) {
         // הדיסק: כוכבים בין הזרועות, דלילים יותר ככל שמתרחקים
         const r = Math.min(GAL_R, -Math.log(1 - Math.random() * 0.97) * 0.42 * R0 + 0.15 * R0);
         const th = Math.random() * Math.PI * 2;
-        const thick = (0.012 + 0.03 * Math.exp(-r / (0.35 * R0))) * R0;
+        const thick = (0.026 + 0.06 * Math.exp(-r / (0.35 * R0))) * R0;
         put(stars, Math.sin(th) * r, gauss() * thick, Math.cos(th) * r, tmp.copy(COL.disc).lerp(COL.arm, Math.min(1, r / GAL_R) * 0.5), 18 + Math.random() * 22, 0.25 + Math.random() * 0.3);
+      } else if (kind < 0.42) {
+        // "הדיסק העבה": כוכבים זקנים ודלילים מעל ומתחת לדיסק, שיוצרים סביבו זוהר רך שמתעבה לכיוון המרכז
+        const r = Math.min(GAL_R, -Math.log(1 - Math.random() * 0.97) * 0.38 * R0 + 0.1 * R0);
+        const th = Math.random() * Math.PI * 2;
+        const thick = (0.07 + 0.09 * Math.exp(-r / (0.4 * R0))) * R0;
+        put(stars, Math.sin(th) * r, gauss() * thick, Math.cos(th) * r, tmp.copy(COL.disc).lerp(COL.bulge, 0.4), 16 + Math.random() * 18, 0.35 + Math.random() * 0.3);
       } else {
         // הזרועות: הגדולות מקבלות יותר כוכבים; כוכבים צעירים כחולים, וכאן ושם ענני גז ורודים שבהם נולדים כוכבים
         let arm;
@@ -786,7 +795,7 @@ const milky = (() => {
         const r = arm.start * R0 * 0.6 + Math.pow(Math.random(), 0.85) * (GAL_R - arm.start * R0 * 0.6);
         const [x, z] = onArm(arm, r, gauss());
         const outer = r / GAL_R;
-        const y = gauss() * (0.008 + 0.01 * (1 - outer)) * R0;
+        const y = gauss() * (0.018 + 0.022 * (1 - outer)) * R0;
         const fade = Math.min(1, (GAL_R - r) / (0.25 * GAL_R)) * Math.min(1, r / (0.55 * R0));
         if (arm.w === 1 && Math.random() < 0.004) {
           // ענן ורוד שבו נולדים כוכבים: קבוצה קטנה וצפופה של נקודות
@@ -799,7 +808,7 @@ const milky = (() => {
     for (let n = 0; n < N * 0.03; n++) {
       const a = (Math.random() - 0.5) * 70 * DEG;
       const r = R0 * Math.exp(a * Math.tan(20 * DEG)) + gauss() * 0.03 * R0;
-      put(stars, Math.sin(a) * r, gauss() * 0.01 * R0, Math.cos(a) * r, tmp.copy(COL.disc).lerp(COL.arm, 0.6), 22 + Math.random() * 30, 0.7);
+      put(stars, Math.sin(a) * r, gauss() * 0.02 * R0, Math.cos(a) * r, tmp.copy(COL.disc).lerp(COL.arm, 0.6), 22 + Math.random() * 30, 0.7);
     }
     // אבק כהה בצד הפנימי של הזרועות (כמו בצילומים של גלקסיות ספירליות)
     for (let n = 0; n < ND; n++) {
@@ -809,7 +818,18 @@ const milky = (() => {
       const [x, z] = onArm(arm, r, -1.1 + gauss() * 0.35);
       put(dust, x, gauss() * 0.006 * R0, z, COL.dust, 140 + Math.random() * 160);
     }
-    return { stars, dust };
+    // הזוהר: כל כוכב ארבעים הופך לכתם גדול וחלש באותו מקום (ובאותו עובי)
+    const glow = { pos: [], col: [], size: [], phase: [], flare: [] };
+    for (let i = 0; i < stars.size.length; i += 40) {
+      // כתם בודד רחוק מהדיסק נראה כמו ענן מוזר – מדלגים עליו
+      if (Math.abs(stars.pos[i * 3 + 1]) > 0.06 * R0) continue;
+      glow.pos.push(stars.pos[i * 3], stars.pos[i * 3 + 1] * 1.6, stars.pos[i * 3 + 2]);
+      for (let c = 0; c < 3; c++) glow.col.push(stars.col[i * 3 + c] * 0.006);
+      glow.size.push(900 + Math.random() * 600);
+      glow.phase.push(0);
+      glow.flare.push(0);
+    }
+    return { stars, dust, glow };
   }
 
   const setGeo = (points, bag) => {
@@ -881,7 +901,7 @@ const milky = (() => {
         }
       }
     };
-    // הדיסק בקוד דק מאוד (כדי שמבחוץ ייראה חד), ולכן כאן מעבים אותו קצת – כמו שהפס נראה בשמיים האמיתיים.
+    // הדיסק בקוד עדיין דק יחסית (כדי שמבחוץ הזרועות ייראו חדות), ולכן כאן מעבים אותו קצת – כמו שהפס נראה בשמיים האמיתיים.
     // כיוון (מהשמש) → נקודה במפה, באותה צורה שבה SphereGeometry פורש את התמונה על הכדור
     const each = (bag, step, thick, near, maxRad, draw) => {
       for (let i = 0; i < bag.size.length; i += step) {
@@ -900,11 +920,11 @@ const milky = (() => {
       const r = stars.col[i * 3] * k, g = stars.col[i * 3 + 1] * k, b = stars.col[i * 3 + 2] * k;
       splat(px, py, rad, (p, f) => { buf[p * 3] += r * f; buf[p * 3 + 1] += g * f; buf[p * 3 + 2] += b * f; });
     };
-    each(stars, 1, 3, 1, 8, starSplat(0.09));
+    each(stars, 1, 1.5, 1, 8, starSplat(0.09));
     // ועוד שכבת זוהר רכה ורחבה, כדי שהפס ייראה כמו ענן ולא רק כמו נקודות
-    each(stars, 4, 3, 1, 8, (i, px, py, rad) => starSplat(0.016)(i, px, py, rad * 4));
+    each(stars, 4, 1.5, 1, 8, (i, px, py, rad) => starSplat(0.016)(i, px, py, rad * 4));
     // האבק הכהה יוצר את "הסדק" שרואים באמצע הפס
-    each(dust, 1, 7, 0.25 * R0, 6, (i, px, py, rad) => splat(px, py, rad * 1.3, (p, f) => { shade[p] *= 1 - 0.12 * f; }));
+    each(dust, 1, 5, 0.25 * R0, 6, (i, px, py, rad) => splat(px, py, rad * 1.3, (p, f) => { shade[p] *= 1 - 0.12 * f; }));
     // מספרים → צבעים, בלי "שריפה" של האזורים הבהירים
     const cv = document.createElement('canvas');
     cv.width = W;
@@ -926,6 +946,7 @@ const milky = (() => {
     if (disk.material.map) return;
     const gal = buildGalaxy();
     setGeo(starPoints, gal.stars);
+    setGeo(glowPoints, gal.glow);
     setGeo(dustPoints, gal.dust);
     // שורה 0 בקנבס היא הקצה העליון של המשטח, שאחרי הסיבוב שלו נמצא ב־z שלילי של holder – בדיוק כמו ב־toPx
     disk.material.map = paintHaze(gal);
@@ -933,7 +954,7 @@ const milky = (() => {
     skyDome.material.map = paintSky(gal);
     skyDome.material.needsUpdate = true;
   };
-  return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, skyDome, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
+  return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -954,7 +975,7 @@ function updateMilkyWay(dt) {
   milky.skyDome.visible = inside > 0.001;
   milky.skyDome.material.opacity = inside * 0.55;
   const on = milkyMix > 0.001;
-  for (const o of [milky.disk, milky.core, milky.here, milky.starPoints, milky.dustPoints]) o.visible = on;
+  for (const o of [milky.disk, milky.core, milky.here, milky.starPoints, milky.dustPoints, milky.glowPoints]) o.visible = on;
   if (!on && inside > 0.001) {
     // גם הכוכבים עצמם של הגלקסיה נראים מבפנים: הגלקסיה חוזרת למקום שבו השמש נמצאת בדיוק אצלנו
     milky.holder.rotation.y = Math.PI / 2;
@@ -983,7 +1004,7 @@ function updateMilkyWay(dt) {
   // עם הזוהר (bloom) המרכז הבהיר מתפשט על כל המסך – מחלישים את שכבת הזוהר והליבה
   const glowK = bloomOn ? 0.45 : 1;
   milky.disk.material.opacity = milkyMix * 0.9 * glowK;
-  for (const m of [milky.starsMat, milky.dustMat]) {
+  for (const m of [milky.starsMat, milky.dustMat, milky.glowMat]) {
     m.uniforms.uMaxPx.value = 1e4;
     m.uniforms.uNear.value = 0;
     m.uniforms.uOpacity.value = milkyMix;
