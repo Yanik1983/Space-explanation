@@ -10,14 +10,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_audio as ga  # noqa: E402
 
 OUT = ga.ROOT / "audio-samples" / "en"
-# איך לכתוב את השם "Noam" כדי שנועם יבטא אותו נכון באנגלית (no-AHM). הטקסט שמוצג באתר נשאר "Noam".
+# סבב שני להגיית השם "Noam" (no-AHM): כתיבה בעברית באמצע משפט באנגלית, וכתיבות אנגליות אחרות.
+# הטקסט שמוצג באתר נשאר "Noam".
 SENTENCES = [
-    "I’m Noam, and I’ll be your guide.",
-    "I’m No-ahm, and I’ll be your guide.",
-    "I’m Noh-ahm, and I’ll be your guide.",
-    "I’m Noh ahm, and I’ll be your guide.",
-    "I’m Noe-ahm, and I’ll be your guide.",
-    "Hi! I’m No-ahm, and I’ll be your guide. Welcome to the solar system!",
+    "I’m נועם, and I’ll be your guide.",
+    "I’m נוֹעַם, and I’ll be your guide.",
+    "I’m No-um, and I’ll be your guide.",
+    "I’m No-am, and I’ll be your guide.",
+    "I’m Noe-am, and I’ll be your guide.",
+    "I’m Noe-um, and I’ll be your guide.",
 ]
 
 
@@ -28,8 +29,8 @@ async def main():
     rows = []
     for n, s in enumerate(SENTENCES, 1):
         print(f"[{n}/{len(SENTENCES)}] {s}")
-        await engine.save(s, OUT / f"name-{n}.mp3", chunks=[s])
-        rows.append(f'<section><p>{s}</p><audio controls preload="none" src="name-{n}.mp3"></audio></section>')
+        await engine.save(s, OUT / f"name2-{n}.mp3", chunks=[s])
+        rows.append(f'<section><p>{s}</p><audio controls preload="none" src="name2-{n}.mp3"></audio></section>')
     (OUT / "index.html").write_text(
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Noam in English</title>'
