@@ -10,6 +10,7 @@
 const AUDIO_DIR = 'audio/';
 const SETTINGS_KEY = 'narrator-settings';
 export const DEFAULT_SETTINGS = { pitch: 1, speed: 1 };
+const WAKE_LEAD = 0.35; // שניות שקט לפני ההקראה הראשונה, כשהשמע עוד "מתעורר"
 const END_SILENCE = 0.08; // שניות שקט שנשארות בסוף כל משפט מוקלט
 
 export function splitSentences(text) {
@@ -97,6 +98,7 @@ export class Narrator {
       } catch {
         this.ctx = new this.AudioContext();
       }
+      this.keepAwake();
     }
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
     return this.ctx;
@@ -140,6 +142,19 @@ export class Narrator {
     });
   }
 
+  // שקט מוחלט בלולאה: מונע מהמכשיר לכבות את פלט השמע בין משפטים, כי אז תחילת המשפט הבא נבלעת
+  keepAwake() {
+    try {
+      const silence = this.ctx.createBufferSource();
+      silence.buffer = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
+      silence.loop = true;
+      silence.connect(this.ctx.destination);
+      silence.start();
+    } catch {
+      // לא קריטי: ההקראה עובדת גם בלי זה
+    }
+  }
+
   playFile(sentence, token, start, done) {
     const fallback = (e) => {
       this.status = 'browser';
@@ -150,6 +165,9 @@ export class Narrator {
       .then((buffer) => {
         if (token !== this.token) return;
         const ctx = this.audioContext();
+        // אחרי הפסקה (ובהקראה הראשונה) השמע "מתעורר" לאט וחותך את תחילת המשפט, בעיקר את "שלום!"
+        const lead = this.lastEnd === undefined || ctx.currentTime - this.lastEnd > 1.5 ? WAKE_LEAD : 0;
+        if (ctx.state !== 'running') ctx.resume().catch(() => {});
         const src = ctx.createBufferSource();
         src.buffer = buffer;
         src.playbackRate.value = this.settings.pitch;
@@ -157,11 +175,13 @@ export class Narrator {
         src.onended = () => {
           clearInterval(this.pulseTimer);
           if (this.source === src) this.source = null;
+          this.lastEnd = ctx.currentTime;
           if (token === this.token) done();
         };
         this.source = src;
-        src.start();
-        start();
+        src.start(ctx.currentTime + lead);
+        if (lead) setTimeout(start, lead * 1000);
+        else start();
         // אין אירועי מילים בקובץ שמע, אז מדגישים את הפה של הדמות בקצב דיבור
         clearInterval(this.pulseTimer);
         this.pulseTimer = setInterval(
