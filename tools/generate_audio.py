@@ -117,6 +117,22 @@ def set_lang(lang):
     AUDIO = ROOT / "audio" / "en" if lang == "en" else ROOT / "audio"
 
 
+# הגייה: מילים שהמודל מבטא לא נכון מוקלטות בכתיבה מנוקדת. הטקסט שמוצג באתר לא משתנה.
+# הכתיבה נבחרה בהאזנה לדוגמאות (tools/narration_samples_he.py). הקידומות (ו, ל, ב, ה, מ, כ, ש) נשארות כמו שהן.
+HE_PRONUNCIATION = [
+    ("מאדים", "מָאדִים"),
+]
+
+
+def spoken(sentence):
+    """הטקסט כפי שנשלח למודל. כשהוא זהה למקור, שם הקובץ נשאר כמו קודם, ולכן רק משפטים שהשתנו מוקלטים מחדש."""
+    if LANG != "he":
+        return sentence
+    for word, fixed in HE_PRONUNCIATION:
+        sentence = re.sub(rf"(?<![א-ת])([ולבהמכש]{{0,3}}){word}(?![א-ת])", rf"\1{fixed}", sentence)
+    return sentence
+
+
 def sentences():
     out = subprocess.run(
         ["node", str(ROOT / "tools" / "list-sentences.mjs"), "--lang", LANG],
@@ -127,7 +143,7 @@ def sentences():
 
 def file_name(sentence, settings):
     # המזהה תלוי גם במנוע ובהגדרות הקול, כך ששינוי שלהם יוצר קבצים חדשים
-    key = f"{settings}|{sentence}".encode()
+    key = f"{settings}|{spoken(sentence)}".encode()
     return hashlib.sha1(key).hexdigest()[:12] + ".mp3"
 
 
@@ -213,6 +229,7 @@ class VoxCPMEngine:
         parts = []
         for i, chunk in enumerate(chunks or (v2_chunks(sentence) if v2 else comma_chunks(sentence))):
             torch.manual_seed(VOXCPM_SEED)
+            chunk = spoken(chunk)
             if LANG == "en":
                 chunk = chunk.replace("Ofek", "אופק")  # באנגלית השם נשמע לא נכון; בכתיבה עברית הוא מבוטא כמו שאופק אומר אותו
                 # קול של אופק בשפה אחרת: רק הדגימה כהתייחסות לגוון, בלי להמשיך את הטקסט העברי שלה
