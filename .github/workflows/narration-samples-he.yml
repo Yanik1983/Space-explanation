@@ -1,0 +1,48 @@
+# דוגמאות להגייה של מילה בעברית (tools/narration_samples_he.py): יוצר את audio-samples/he/ ומעלה למאגר.
+# לא משנה את ההקראה באתר עצמו.
+name: Narration samples (Hebrew words)
+
+on:
+  push:
+    paths:
+      - tools/narration_samples_he.py
+      - .github/workflows/narration-samples-he.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  samples:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: voxcpm2-model-v1
+
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Install VoxCPM (CPU)
+        run: |
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install voxcpm soundfile
+
+      - run: python3 tools/narration_samples_he.py
+
+      - name: Commit samples
+        run: |
+          git add audio-samples/he
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Hebrew word samples" || exit 0
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
