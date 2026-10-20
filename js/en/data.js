@@ -368,7 +368,6 @@ export const BLACK_HOLE = {
     'The closest black hole we know of is called Gaia B H one. ' +
     'It is about one thousand five hundred and sixty light-years away, and it is ten times heavier than the Sun, but all that mass is squeezed into a ball only fifty-six kilometers wide. ' +
     'We drew it here like the black hole in the movie “Interstellar”: a ring of hot gas spins around it, and its gravity bends the light of that ring, so we can see it both above and below the hole. ' +
-    'The Milky Way and the stars behind it look bent too. ' +
     'The real black hole has no glowing ring like this, so you can’t see it at all. ' +
     'Scientists found it because they saw a star like our Sun wobbling, and they figured out that something heavy and invisible was pulling on it. ' +
     'And don’t worry: it is very far away, and it can’t hurt us.',
