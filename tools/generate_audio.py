@@ -36,6 +36,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 AUDIO = ROOT / "audio"
+LANG = "he"  # "en": האנגלית נשמרת ב־audio/en/ ומשתמשת בקול של נועם ללא טקסט ההתייחסות העברי
 MODELS = ROOT / ".cache" / "tts-models"
 
 # ---- edge: הקול של נועם. אפשר לנסות גם he-IL-HilaNeural.
@@ -110,9 +111,15 @@ def v2_chunks(sentence):
     return v2_chunks(sentence[:cut].strip()) + v2_chunks(sentence[cut:].strip())
 
 
+def set_lang(lang):
+    global LANG, AUDIO
+    LANG = lang
+    AUDIO = ROOT / "audio" / "en" if lang == "en" else ROOT / "audio"
+
+
 def sentences():
     out = subprocess.run(
-        ["node", str(ROOT / "tools" / "list-sentences.mjs")],
+        ["node", str(ROOT / "tools" / "list-sentences.mjs"), "--lang", LANG],
         check=True, capture_output=True, text=True,
     ).stdout
     return json.loads(out)
@@ -188,6 +195,8 @@ class VoxCPMEngine:
         self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|punct{COMMA_PAUSE}-{END_PAUSE}-{MIN_CHUNK}"
         if style == "v2":
             self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|v2b-{V2_LONG}-{V2_COMMA_PAUSE}"
+        if LANG == "en":
+            self.settings += "|en"
         self.model = None  # נטען רק כשבאמת צריך ליצור קול (לא ב־--finalize)
 
     async def save(self, sentence, path, chunks=None):
@@ -204,8 +213,13 @@ class VoxCPMEngine:
         parts = []
         for i, chunk in enumerate(chunks or (v2_chunks(sentence) if v2 else comma_chunks(sentence))):
             torch.manual_seed(VOXCPM_SEED)
-            wav = self.model.generate(text=chunk, prompt_wav_path=str(VOXCPM_REF), prompt_text=self.ref_text,
-                                      reference_wav_path=str(VOXCPM_REF), cfg_value=2.0, inference_timesteps=10)
+            if LANG == "en":
+                # קול של נועם בשפה אחרת: רק הדגימה כהתייחסות לגוון, בלי להמשיך את הטקסט העברי שלה
+                wav = self.model.generate(text=chunk, reference_wav_path=str(VOXCPM_REF),
+                                          cfg_value=2.0, inference_timesteps=10)
+            else:
+                wav = self.model.generate(text=chunk, prompt_wav_path=str(VOXCPM_REF), prompt_text=self.ref_text,
+                                          reference_wav_path=str(VOXCPM_REF), cfg_value=2.0, inference_timesteps=10)
             if i:
                 parts.append(np.zeros(int(sr * pause), dtype=np.float32))
             wav = np.asarray(wav, dtype=np.float32)
@@ -246,6 +260,7 @@ async def pick_engine(args):
 
 async def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--lang", choices=["he", "en"], default="he", help="שפת ההקראה")
     p.add_argument("--engine", choices=["auto", "edge", "phonikud", "voxcpm"], default="auto")
     p.add_argument("--voice", default=EDGE_VOICE, help="קול של edge")
     p.add_argument("--pitch", default=EDGE_PITCH, help="טון של edge, למשל +20Hz")
@@ -257,6 +272,7 @@ async def main():
     p.add_argument("--finalize", action="store_true",
                    help="לא ליצור קול; לעדכן את manifest.json מהקבצים הקיימים, רק אם יש קובץ לכל משפט")
     args = p.parse_args()
+    set_lang(args.lang)
 
     engine = await pick_engine(args)
 

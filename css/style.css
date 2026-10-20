@@ -58,6 +58,7 @@ html, body {
 .btn-primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 700; }
 .btn-primary:hover { background: #ffc657; }
 .btn-icon { padding: 8px 12px; min-width: 42px; }
+a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .btn-small { padding: 6px 12px; font-size: 13px; }
 .btn-big { font-size: 18px; padding: 14px 26px; }
 

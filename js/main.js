@@ -4,14 +4,12 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY } from './data.js';
+import { LANG, LOCALE, tt } from './i18n.js';
+import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY, GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION, MOONS, COMETS, COMETS_INFO } from './content.js';
 import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto, skyTexture } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './kid-presenter.js';
-import { GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION } from './glossary.js';
-import { MOONS } from './moons.js';
-import { COMETS, COMETS_INFO } from './comets.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -531,7 +529,7 @@ function initGalaxyMotion() {
   scene.add(motionArrow);
   galaxyInfo.label = document.createElement('div');
   galaxyInfo.label.className = 'label motion-label';
-  galaxyInfo.label.textContent = 'כיוון התנועה של מערכת השמש';
+  galaxyInfo.label.textContent = tt('כיוון התנועה של מערכת השמש', 'The direction the Solar System is moving');
   galaxyInfo.label.style.display = 'none';
   $('labels').appendChild(galaxyInfo.label);
   galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-44);
@@ -565,7 +563,7 @@ function updateGalaxyMotion(dt) {
   const boosted = timeRuns() && motionMix > 0 && MOTION_MIN_SPEED * motionMix > simSpeed();
   if (boosted !== speedBoostShown) {
     speedBoostShown = boosted;
-    if (boosted) $('speed-label').textContent = `כל שנייה = ${MOTION_MIN_SPEED} ימים`;
+    if (boosted) $('speed-label').textContent = tt(`כל שנייה = ${MOTION_MIN_SPEED} ימים`, `${MOTION_MIN_SPEED} days per second`);
     else updateSpeedLabel();
   }
   if (!on) {
@@ -956,7 +954,7 @@ const milky = (() => {
     skyDome.material.map.minFilter = THREE.LinearFilter;
     skyDome.material.needsUpdate = true;
   };
-  return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label('☀️ אנחנו כאן', 'milky-here'), centreLabel: label('מרכז הגלקסיה', 'milky-centre') };
+  return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -1360,7 +1358,7 @@ for (const body of bodies) {
     const beltChip = document.createElement('button');
     beltChip.type = 'button';
     beltChip.className = 'chip';
-    beltChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🪨</span><span>אסטרואידים</span>';
+    beltChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🪨</span><span>' + tt('אסטרואידים', 'Asteroids') + '</span>';
     beltChip.addEventListener('click', () => userSelect(belt));
     $('chooser').appendChild(beltChip);
     belt.chip = beltChip;
@@ -1370,28 +1368,28 @@ for (const body of bodies) {
   const cometChip = document.createElement('button');
   cometChip.type = 'button';
   cometChip.className = 'chip';
-  cometChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">☄️</span><span>שביטים</span>';
+  cometChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">☄️</span><span>' + tt('שביטים', 'Comets') + '</span>';
   cometChip.addEventListener('click', () => userSelect(cometsInfo));
   $('chooser').appendChild(cometChip);
   cometsInfo.chip = cometChip;
   const galaxyChip = document.createElement('button');
   galaxyChip.type = 'button';
   galaxyChip.className = 'chip';
-  galaxyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌀</span><span>טסים בחלל</span>';
+  galaxyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌀</span><span>' + tt('טסים בחלל', 'Flying through space') + '</span>';
   galaxyChip.addEventListener('click', () => userSelect(galaxyInfo));
   $('chooser').appendChild(galaxyChip);
   galaxyInfo.chip = galaxyChip;
   const bhChip = document.createElement('button');
   bhChip.type = 'button';
   bhChip.className = 'chip';
-  bhChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">⚫</span><span>חור שחור</span>';
+  bhChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">⚫</span><span>' + tt('חור שחור', 'Black hole') + '</span>';
   bhChip.addEventListener('click', () => userSelect(blackHoleInfo));
   $('chooser').appendChild(bhChip);
   blackHoleInfo.chip = bhChip;
   const milkyChip = document.createElement('button');
   milkyChip.type = 'button';
   milkyChip.className = 'chip';
-  milkyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌌</span><span>שביל החלב</span>';
+  milkyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌌</span><span>' + tt('שביל החלב', 'Milky Way') + '</span>';
   milkyChip.addEventListener('click', () => userSelect(milkyInfo));
   $('chooser').appendChild(milkyChip);
   milkyInfo.chip = milkyChip;
@@ -1400,7 +1398,7 @@ for (const body of bodies) {
   const chip = document.createElement('button');
   chip.type = 'button';
   chip.className = 'chip';
-  chip.innerHTML = '<span class="ball-emoji" aria-hidden="true">📖</span><span>מילון</span>';
+  chip.innerHTML = '<span class="ball-emoji" aria-hidden="true">📖</span><span>' + tt('מילון', 'Glossary') + '</span>';
   chip.addEventListener('click', () => openGlossary());
   $('chooser').appendChild(chip);
 }
@@ -1420,13 +1418,20 @@ function sliderToSpeed(v) {
 function updateSpeedLabel() {
   const d = simSpeed();
   let text;
-  if (d < 1) text = `כל שנייה = ${Math.max(1, Math.round(d * 24))} שעות`;
-  else if (d < 60) text = `כל שנייה = ${Math.round(d)} ימים`;
-  else text = `כל שנייה = ${(d / 30.44).toFixed(d < 300 ? 1 : 0)} חודשים`;
-  $('speed-label').textContent = timeRuns() ? text : 'הזמן עצר';
+  if (d < 1) {
+    const h = Math.max(1, Math.round(d * 24));
+    text = tt(`כל שנייה = ${h} שעות`, `${h} ${h === 1 ? 'hour' : 'hours'} per second`);
+  } else if (d < 60) {
+    const n = Math.round(d);
+    text = tt(`כל שנייה = ${n} ימים`, `${n} ${n === 1 ? 'day' : 'days'} per second`);
+  } else {
+    const m = (d / 30.44).toFixed(d < 300 ? 1 : 0);
+    text = tt(`כל שנייה = ${m} חודשים`, `${m} months per second`);
+  }
+  $('speed-label').textContent = timeRuns() ? text : tt('הזמן עצר', 'Time is paused');
 }
 
-const dateFmt = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+const dateFmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' });
 
 $('speed').addEventListener('input', (e) => {
   daysPerSecond = sliderToSpeed(+e.target.value);
@@ -1436,7 +1441,7 @@ $('speed').addEventListener('input', (e) => {
 $('btn-play').addEventListener('click', () => {
   playing = !playing;
   $('btn-play').textContent = playing ? '⏸' : '▶';
-  $('btn-play').title = playing ? 'עצירת הזמן' : 'הפעלת הזמן';
+  $('btn-play').title = playing ? tt('עצירת הזמן', 'Pause time') : tt('הפעלת הזמן', 'Resume time');
   updateSpeedLabel();
 });
 $('btn-today').addEventListener('click', () => {
@@ -1705,7 +1710,7 @@ $('btn-guide').addEventListener('click', () => {
   guideOn = !guideOn;
   presenterEl.hidden = !guideOn;
   $('btn-guide').setAttribute('aria-pressed', String(guideOn));
-  $('btn-guide').title = guideOn ? 'הסתרת נועם המדריך' : 'הצגת נועם המדריך';
+  $('btn-guide').title = guideOn ? tt('הסתרת נועם המדריך', 'Hide Noam the guide') : tt('הצגת נועם המדריך', 'Show Noam the guide');
   $('btn-guide').style.opacity = guideOn ? '' : '0.5';
 });
 let selected = null;
@@ -1777,7 +1782,7 @@ function stopSpeaking() {
 let listening = false;
 function setListening(on) {
   listening = on;
-  $('btn-listen').textContent = on ? '⏹ עצירה' : '🔊 הקשיבו';
+  $('btn-listen').textContent = on ? tt('⏹ עצירה', '⏹ Stop') : tt('🔊 הקשיבו', '🔊 Listen');
 }
 
 $('btn-listen').addEventListener('click', () => {
@@ -1787,7 +1792,8 @@ $('btn-listen').addEventListener('click', () => {
 });
 
 // ---------- מילון מושגים ----------
-const isLetter = (ch) => !!ch && /[\u05D0-\u05EA]/.test(ch);
+const LETTER = LANG === 'en' ? /[A-Za-z]/ : /[\u05D0-\u05EA]/;
+const isLetter = (ch) => !!ch && LETTER.test(ch);
 
 // מחזיר את המשפט כרשימת קטעי טקסט וכפתורי מושגים. כל מושג מסומן רק פעם אחת (used)
 function linkTerms(text, used) {
@@ -1799,7 +1805,7 @@ function linkTerms(text, used) {
     if (!isLetter(text[i - 1])) {
       // הצורה הארוכה ביותר שמתאימה כאן (כך "כוכב לכת" לא נקרא בטעות כ"כוכב")
       match = GLOSSARY_FORMS.find(({ form, term }) =>
-        text.startsWith(form, i) && !isLetter(text[i + form.length]) &&
+        (LANG === 'en' ? text.slice(i, i + form.length).toLowerCase() === form : text.startsWith(form, i)) && !isLetter(text[i + form.length]) &&
         !(term.notBefore || []).some((w) => text.startsWith(' ' + w, i + form.length)));
     }
     if (!match) {
@@ -1818,7 +1824,7 @@ function linkTerms(text, used) {
     btn.type = 'button';
     btn.className = 'term';
     btn.textContent = match.form;
-    btn.title = 'מה זה ' + match.term.title + '?';
+    btn.title = tt('מה זה ', 'What is ') + match.term.title + '?';
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       openTerm(match.term);
@@ -1856,7 +1862,7 @@ function openTerm(term, from = 'panel') {
   $('term-list').hidden = true;
   $('term-emoji').textContent = term.emoji;
   $('term-title').textContent = term.title;
-  $('term-kicker').textContent = term.kicker || 'נועם מסביר מושג';
+  $('term-kicker').textContent = term.kicker || tt('נועם מסביר מושג', 'Noam explains');
   $('term-text').replaceChildren(
     ...splitSentences(term.text).flatMap((s) => {
       const span = document.createElement('span');
@@ -1864,7 +1870,7 @@ function openTerm(term, from = 'panel') {
       return [span, ' '];
     }),
   );
-  $('term-back').textContent = from === 'list' ? 'חזרה למילון' : $('panel').hidden ? 'סגירה' : 'חזרה להסבר';
+  $('term-back').textContent = from === 'list' ? tt('חזרה למילון', 'Back to the glossary') : $('panel').hidden ? tt('סגירה', 'Close') : tt('חזרה להסבר', 'Back to the story');
   $('term-card').scrollTop = 0;
   presenter.play('open', 2.4);
   if (voiceOn) speakTerm();
@@ -1874,13 +1880,13 @@ function openTerm(term, from = 'panel') {
 function speakTerm() {
   const spans = [...$('term-text').querySelectorAll('span')];
   termSpeaking = true;
-  $('term-listen').textContent = '⏹ עצירה';
+  $('term-listen').textContent = tt('⏹ עצירה', '⏹ Stop');
   narrator.speak(currentTerm.text, {
     onSentence: (i) => spans.forEach((s, j) => s.classList.toggle('speaking', i === j)),
     onEnd: () => {
       spans.forEach((s) => s.classList.remove('speaking'));
       termSpeaking = false;
-      $('term-listen').textContent = '🔊 שוב';
+      $('term-listen').textContent = tt('🔊 שוב', '🔊 Again');
     },
   });
 }
@@ -1959,7 +1965,7 @@ $('term-listen').addEventListener('click', () => {
   if (termSpeaking) {
     narrator.stop();
     termSpeaking = false;
-    $('term-listen').textContent = '🔊 שוב';
+    $('term-listen').textContent = tt('🔊 שוב', '🔊 Again');
     $('term-text').querySelectorAll('span').forEach((s) => s.classList.remove('speaking'));
   } else speakTerm();
 });
@@ -1998,7 +2004,7 @@ function markActive(body) {
   milkyTarget = body === milkyInfo ? 1 : 0;
 }
 
-const distFmt = new Intl.NumberFormat('he-IL', { maximumFractionDigits: 1 });
+const distFmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
 function updateLiveDistance() {
   const el = $('panel-live');
   if (!selected?.au || selected.isSun || selected.isBelt || $('panel').hidden) {
@@ -2007,15 +2013,17 @@ function updateLiveDistance() {
   }
   el.hidden = false;
   const million = selected.au.length() * 149.598;
-  const text = million >= 1000 ? `${distFmt.format(million / 1000)} מיליארד ק"מ` : `${distFmt.format(million)} מיליון ק"מ`;
-  if (el.dataset.text !== text) el.textContent = el.dataset.text = `המרחק מהשמש עכשיו: ${text}`;
+  const text = million >= 1000
+    ? tt(`${distFmt.format(million / 1000)} מיליארד ק"מ`, `${distFmt.format(million / 1000)} billion km`)
+    : tt(`${distFmt.format(million)} מיליון ק"מ`, `${distFmt.format(million)} million km`);
+  if (el.dataset.text !== text) el.textContent = el.dataset.text = tt(`המרחק מהשמש עכשיו: ${text}`, `Distance from the Sun now: ${text}`);
 }
 
 $('btn-scale').addEventListener('click', () => {
   endShow();
   scaleTarget = 1 - scaleTarget;
-  $('btn-scale').querySelector('span').textContent = scaleTarget ? 'מרחקים מוקטנים' : 'מרחקים אמיתיים';
-  $('btn-scale').title = scaleTarget ? 'מעבר למרחקים מוקטנים' : 'מעבר למרחקים אמיתיים';
+  $('btn-scale').querySelector('span').textContent = scaleTarget ? tt('מרחקים מוקטנים', 'Compact distances') : tt('מרחקים אמיתיים', 'Real distances');
+  $('btn-scale').title = scaleTarget ? tt('מעבר למרחקים מוקטנים', 'Switch to compact distances') : tt('מעבר למרחקים אמיתיים', 'Switch to real distances');
   if (tour) endTour();
   markActive(null);
   flyTo(null, 3);
@@ -2056,7 +2064,7 @@ function showBody(body) {
   showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
   if (body.moons.length) {
     const h = document.createElement('h3');
-    h.textContent = body.moons.length === 1 ? '🌙 לחצו כדי לשמוע על הירח:' : `🌙 הירחים החשובים של ${d.name}:`;
+    h.textContent = body.moons.length === 1 ? tt('🌙 לחצו כדי לשמוע על הירח:', '🌙 Tap to hear about the moon:') : tt(`🌙 הירחים החשובים של ${d.name}:`, `🌙 The important moons of ${d.name}:`);
     const list = document.createElement('div');
     list.className = 'moons-list';
     for (const m of body.moons) {
@@ -2081,7 +2089,7 @@ function showComets() {
   flyTo(nearest);
   showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
   const h = document.createElement('h3');
-  h.textContent = '☄️ שביטים מפורסמים:';
+  h.textContent = tt('☄️ שביטים מפורסמים:', '☄️ Famous comets:');
   const list = document.createElement('div');
   list.className = 'moons-list';
   for (const c of comets) {
@@ -2102,7 +2110,7 @@ function openMoon(m) {
     if (tour) endTour();
     showBody(m.planet);
   }
-  openTerm({ ...m.data, kicker: `ירח של ${m.planet.data.name}` }, 'panel');
+  openTerm({ ...m.data, kicker: tt(`ירח של ${m.planet.data.name}`, `Moon of ${m.planet.data.name}`) }, 'panel');
 }
 
 function userSelect(body) {
@@ -2121,7 +2129,7 @@ $('btn-overview').addEventListener('click', () => {
 $('btn-voice').addEventListener('click', () => {
   voiceOn = !voiceOn;
   $('btn-voice').textContent = voiceOn ? '🔊' : '🔇';
-  $('btn-voice').title = voiceOn ? 'קריין פועל' : 'קריין כבוי';
+  $('btn-voice').title = voiceOn ? tt('קריין פועל', 'Narrator on') : tt('קריין כבוי', 'Narrator off');
   $('btn-voice').setAttribute('aria-pressed', String(voiceOn));
   if (!voiceOn) {
     stopSpeaking();
@@ -2139,10 +2147,10 @@ function showSettings() {
   $('rate').value = speed;
   $('pitch-value').textContent = percent(pitch);
   $('rate-value').textContent = percent(speed);
-  const voice = narrator.hasRecordings ? 'הקול של נועם (קבצים מוקלטים)' : 'קול הדפדפן';
-  const last = { files: 'הקול של נועם', browser: 'קול הדפדפן', none: 'בלי קול' }[narrator.status];
+  const voice = narrator.hasRecordings ? tt('הקול של נועם (קבצים מוקלטים)', "Noam's voice (recorded files)") : tt('קול הדפדפן', 'Browser voice');
+  const last = { files: tt('הקול של נועם', "Noam's voice"), browser: tt('קול הדפדפן', 'Browser voice'), none: tt('בלי קול', 'No voice') }[narrator.status];
   $('voice-status').textContent =
-    `קול זמין: ${voice}` + (last ? ` · הושמע לאחרונה: ${last}` : '') + (narrator.lastError ? ` · שגיאה: ${narrator.lastError}` : '');
+    tt(`קול זמין: ${voice}`, `Available voice: ${voice}`) + (last ? tt(` · הושמע לאחרונה: ${last}`, ` · Last played: ${last}`) : '') + (narrator.lastError ? tt(` · שגיאה: ${narrator.lastError}`, ` · Error: ${narrator.lastError}`) : '');
 }
 
 function toggleSettings(open = settingsEl.hidden) {
@@ -2183,7 +2191,7 @@ $('settings-test').addEventListener('click', () => {
   narrator.unlock();
   setListening(false);
   presenter.play('wave', 2);
-  narrator.speak('שלום! קוראים לי נועם, ואני אהיה המדריך שלכם.');
+  narrator.speak(splitSentences(TOUR_INTRO[0].narration).slice(0, 2).join(' '));
 });
 
 // ---------- סיור מודרך ----------
@@ -2211,9 +2219,9 @@ function goToStep(i) {
   endShow();
   tour.index = Math.max(0, Math.min(tourSteps.length - 1, i));
   const step = tourSteps[tour.index];
-  $('tour-step').textContent = `${tour.index + 1} מתוך ${tourSteps.length}`;
+  $('tour-step').textContent = tt(`${tour.index + 1} מתוך ${tourSteps.length}`, `${tour.index + 1} of ${tourSteps.length}`);
   $('tour-prev').disabled = tour.index === 0;
-  $('tour-next').textContent = tour.index === tourSteps.length - 1 ? 'סיום' : 'הבא ←';
+  $('tour-next').textContent = tour.index === tourSteps.length - 1 ? tt('סיום', 'Finish') : tt('הבא ←', 'Next →');
 
   if (step.body) {
     showBody(step.body);
@@ -2440,9 +2448,11 @@ function updateVoiceNote() {
   }
   note.hidden = false;
   note.textContent = narrator.supported
-    ? 'לא מצאנו במכשיר הזה קול שמדבר עברית, אז ההסברים יופיעו כטקסט בלבד. ' +
-      'אפשר להוסיף קול עברי בהגדרות המכשיר (שפה ודיבור), או לנסות בדפדפן כרום.'
-    : 'הדפדפן הזה לא תומך בהקראה, אז ההסברים יופיעו כטקסט בלבד.';
+    ? tt('לא מצאנו במכשיר הזה קול שמדבר עברית, אז ההסברים יופיעו כטקסט בלבד. ' +
+        'אפשר להוסיף קול עברי בהגדרות המכשיר (שפה ודיבור), או לנסות בדפדפן כרום.',
+      "We couldn't find an English voice on this device, so the explanations will appear as text only. " +
+        'You can add an English voice in the device settings (language and speech), or try the Chrome browser.')
+    : tt('הדפדפן הזה לא תומך בהקראה, אז ההסברים יופיעו כטקסט בלבד.', 'This browser does not support reading aloud, so the explanations will appear as text only.');
 }
 narrator.onVoiceChange = updateVoiceNote;
 // הקולות נטענים לפעמים באיחור, לכן נותנים להם רגע לפני שמציגים אזהרה

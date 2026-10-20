@@ -7,7 +7,9 @@
 // גובה הקול והמהירות נקבעים בדפדפן (Narrator.settings), בלי ליצור מחדש את הקבצים:
 // הקבצים מנוגנים דרך Web Audio, ומתיחת זמן (WSOLA) מאפשרת לשנות טון ומהירות בנפרד.
 
-const AUDIO_DIR = 'audio/';
+import { LANG, LOCALE } from './i18n.js';
+
+const AUDIO_DIR = LANG === 'en' ? 'audio/en/' : 'audio/';
 const SETTINGS_KEY = 'narrator-settings';
 export const DEFAULT_SETTINGS = { pitch: 1, speed: 1 };
 const WAKE_LEAD = 0.35; // שניות שקט לפני ההקראה הראשונה, כשהשמע עוד "מתעורר"
@@ -46,7 +48,7 @@ export class Narrator {
 
   pickVoice() {
     const voices = speechSynthesis.getVoices();
-    const hebrew = voices.filter((v) => /^(he|iw)([-_]|$)/i.test(v.lang));
+    const hebrew = voices.filter((v) => (LANG === 'en' ? /^en([-_]|$)/i : /^(he|iw)([-_]|$)/i).test(v.lang));
     // עדיפות לקולות איכותיים (Google / Natural / Online) אם קיימים
     hebrew.sort((a, b) => score(b) - score(a));
     this.voice = hebrew[0] || null;
@@ -236,7 +238,7 @@ export class Narrator {
       return;
     }
     const u = new SpeechSynthesisUtterance(sentence);
-    u.lang = this.voice.lang || 'he-IL';
+    u.lang = this.voice.lang || LOCALE;
     u.voice = this.voice;
     u.rate = Math.min(10, this.rate * this.settings.speed);
     // 1.2 = קצת יותר גבוה מברירת המחדל, שיישמע צעיר יותר

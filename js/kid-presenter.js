@@ -4,6 +4,7 @@
 // היחידות הן מטרים. הילד מביט אל +z, וצד ימין שלו הוא −x.
 
 import * as THREE from 'three';
+import { tt } from './i18n.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ProceduralPresenter } from './presenter.js';
@@ -237,7 +238,7 @@ export class Presenter {
       panel.add(l);
     }
     attach('Boy_Spine2', mesh(new THREE.CircleGeometry(0.03, 40), new THREE.MeshStandardMaterial({ map: patchTexture(), roughness: 0.8 })), [0.06, 0.13, 0.087], euler(-0.15, 0.35, 0));
-    attach('Boy_Spine2', mesh(new THREE.PlaneGeometry(0.06, 0.022), new THREE.MeshStandardMaterial({ map: nameTagTexture('נועם'), roughness: 0.8 })), [-0.062, 0.14, 0.087], euler(-0.15, -0.35, 0));
+    attach('Boy_Spine2', mesh(new THREE.PlaneGeometry(0.06, 0.022), new THREE.MeshStandardMaterial({ map: nameTagTexture(tt('נועם', 'Noam')), roughness: 0.8 })), [-0.062, 0.14, 0.087], euler(-0.15, -0.35, 0));
     attach('Boy_Spine2', mesh(new THREE.BoxGeometry(0.2, 0.26, 0.09), new THREE.MeshStandardMaterial({ color: '#d7dbe1', roughness: 0.7 })), [0, 0.04, -0.1]);
 
     // אוזניות עם מיקרופון

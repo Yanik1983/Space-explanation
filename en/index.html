@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <base href="../">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>A Journey Through the Solar System</title>
+  <meta name="description" content="The Solar System in 3D with spoken explanations in English, for kids and the whole family">
+  <meta name="theme-color" content="#05060f">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🪐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=20261020-1240">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/",
+        "./js/comets.js": "./js/comets.js?v=20261020-1240",
+        "./js/content.js": "./js/content.js?v=20261020-1240",
+        "./js/data.js": "./js/data.js?v=20261020-1240",
+        "./js/glossary.js": "./js/glossary.js?v=20261020-1240",
+        "./js/i18n.js": "./js/i18n.js?v=20261020-1240",
+        "./js/kid-presenter.js": "./js/kid-presenter.js?v=20261020-1240",
+        "./js/main.js": "./js/main.js?v=20261020-1240",
+        "./js/moons.js": "./js/moons.js?v=20261020-1240",
+        "./js/orbits.js": "./js/orbits.js?v=20261020-1240",
+        "./js/presenter.js": "./js/presenter.js?v=20261020-1240",
+        "./js/speech.js": "./js/speech.js?v=20261020-1240",
+        "./js/texgen.js": "./js/texgen.js?v=20261020-1240",
+        "./js/texture-worker.js": "./js/texture-worker.js?v=20261020-1240",
+        "./js/textures.js": "./js/textures.js?v=20261020-1240",
+        "./js/en/comets.js": "./js/en/comets.js?v=20261020-1240",
+        "./js/en/data.js": "./js/en/data.js?v=20261020-1240",
+        "./js/en/glossary.js": "./js/en/glossary.js?v=20261020-1240",
+        "./js/en/moons.js": "./js/en/moons.js?v=20261020-1240"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="scene" aria-label="3D simulation of the Solar System"></div>
+  <div id="labels"></div>
+
+  <header class="topbar">
+    <h1 class="brand">Solar System Journey</h1>
+    <div class="actions">
+      <button id="btn-tour" class="btn btn-primary" type="button">Guided tour</button>
+      <button id="btn-overview" class="btn" type="button" title="View from above">🔭 <span class="hide-phone">Top view</span></button>
+      <button id="btn-scale" class="btn" type="button" title="Switch to real distances">📏 <span class="hide-phone">Real distances</span></button>
+      <button id="btn-guide" class="btn btn-icon" type="button" aria-pressed="true" title="Hide Noam the guide">👦</button>
+      <button id="btn-voice" class="btn btn-icon" type="button" aria-pressed="true" title="Narrator on">🔊</button>
+      <a id="btn-lang" class="btn btn-icon" href="./" lang="he" hreflang="he" title="הגרסה בעברית">עב</a>
+      <button id="btn-settings" class="btn btn-icon" type="button" aria-expanded="false" aria-controls="settings" title="Voice settings">⚙️</button>
+    </div>
+  </header>
+
+  <div id="settings" class="settings" role="dialog" aria-label="Voice settings" hidden>
+    <h2>Voice settings</h2>
+    <label class="setting">
+      <span>Voice pitch <output id="pitch-value"></output></span>
+      <input id="pitch" type="range" min="0.75" max="1.5" step="0.05">
+      <span class="setting-ends"><span>Low</span><span>High</span></span>
+    </label>
+    <label class="setting">
+      <span>Speaking speed <output id="rate-value"></output></span>
+      <input id="rate" type="range" min="0.6" max="1.5" step="0.05">
+      <span class="setting-ends"><span>Slow</span><span>Fast</span></span>
+    </label>
+    <div class="settings-actions">
+      <button id="settings-test" class="btn btn-primary btn-small" type="button">🔊 Try it</button>
+      <button id="settings-reset" class="btn btn-small" type="button">Reset</button>
+    </div>
+    <p id="voice-status" class="voice-status"></p>
+    <p class="credit">Noam's character: <a href="https://sketchfab.com/3d-models/kid-character-fully-rigged-984867aa0e8b4aad84063874dd5179cc" target="_blank" rel="noopener">Guilherme Navarro</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, modified. Sun surface: <a href="https://sketchfab.com/3d-models/sun-9ef1c68fbb944147bcfcc891d3912645" target="_blank" rel="noopener">SebastianSosnowski</a>, CC BY 4.0, modified.</p>
+  </div>
+
+  <section class="timebar" aria-label="Time controls">
+    <button id="btn-play" class="btn btn-icon" type="button" title="Pause time">⏸</button>
+    <label class="speed">
+      <span>Time speed</span>
+      <input id="speed" type="range" min="0" max="100" step="1" value="56">
+    </label>
+    <div class="clock">
+      <span id="speed-label"></span>
+      <span id="date-label"></span>
+    </div>
+    <button id="btn-today" class="btn btn-small" type="button">Today</button>
+  </section>
+
+  <aside id="panel" class="panel" hidden aria-live="polite">
+    <button id="panel-close" class="close" type="button" aria-label="Close">✕</button>
+    <div class="panel-head">
+      <span id="panel-dot" class="dot"></span>
+      <div>
+        <h2 id="panel-title"></h2>
+        <p id="panel-subtitle" class="subtitle"></p>
+      </div>
+    </div>
+    <div id="ask-continue" class="ask" hidden>
+      <p>🙋‍♂️ <strong>Noam:</strong> Want me to keep explaining?</p>
+      <div class="ask-actions">
+        <button id="ask-yes" class="btn btn-primary" type="button">Yes, keep going!</button>
+        <button id="ask-no" class="btn" type="button">Not now</button>
+      </div>
+    </div>
+    <button id="btn-listen" class="btn btn-primary listen" type="button">🔊 Listen</button>
+    <p id="panel-live" class="live" hidden></p>
+    <p id="panel-text" class="narration"></p>
+    <div id="panel-fun" class="fun"></div>
+    <div id="panel-moons" class="moons" hidden></div>
+    <dl id="panel-facts" class="facts"></dl>
+  </aside>
+
+  <aside id="term-card" class="panel term-card" hidden aria-live="polite">
+    <button id="term-close" class="close" type="button" aria-label="Close">✕</button>
+    <div id="term-view">
+      <div class="panel-head">
+        <span id="term-emoji" class="term-emoji" aria-hidden="true"></span>
+        <div>
+          <p id="term-kicker" class="subtitle">Noam explains</p>
+          <h2 id="term-title"></h2>
+        </div>
+      </div>
+      <p id="term-text" class="narration"></p>
+      <div class="term-actions">
+        <button id="term-back" class="btn btn-primary" type="button">Back to the story</button>
+        <button id="term-listen" class="btn" type="button">🔊 Again</button>
+        <button id="term-all" class="btn" type="button">📖 All words</button>
+      </div>
+    </div>
+    <div id="term-list" hidden>
+      <div class="panel-head">
+        <span class="term-emoji" aria-hidden="true">📖</span>
+        <div>
+          <h2>Glossary</h2>
+          <p class="subtitle">Tap a word and Noam will explain it</p>
+        </div>
+      </div>
+      <div id="term-grid" class="term-grid"></div>
+    </div>
+  </aside>
+
+  <div id="tourbar" class="tourbar" hidden>
+    <button id="tour-prev" class="btn" type="button">← Previous</button>
+    <span id="tour-step"></span>
+    <button id="tour-next" class="btn" type="button">Next →</button>
+    <button id="tour-stop" class="btn btn-small" type="button">Finish</button>
+  </div>
+
+  <nav id="chooser" class="chooser" aria-label="Choose a planet"></nav>
+
+  <div id="presenter" class="presenter" aria-hidden="true"></div>
+
+  <div id="intro" class="intro">
+    <div class="intro-card">
+      <h2>A Journey Through the Solar System</h2>
+      <p>Hi! I'm Noam 👋 Let's meet the Sun and the eight planets together, see how they all move, and hear their stories.</p>
+      <div class="intro-actions">
+        <button id="start-tour" class="btn btn-primary btn-big" type="button">🚀 Start the guided tour</button>
+        <button id="start-free" class="btn btn-big" type="button">Explore on my own</button>
+      </div>
+      <p id="voice-note" class="voice-note" hidden></p>
+      <p class="hint">Tip: drag to turn the view, and pinch or scroll to zoom in.</p>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js?v=20261020-1240"></script>
+</body>
+</html>

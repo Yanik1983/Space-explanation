@@ -3,6 +3,7 @@
 // שיער מקווצות, וחליפת חלל עם חומרים פיזיקליים. היחידות הן מטרים, והמצלמה מצלמת מהמותניים ומעלה.
 
 import * as THREE from 'three';
+import { tt } from './i18n.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -519,7 +520,7 @@ export class ProceduralPresenter {
     add(body, new THREE.CylinderGeometry(0.003, 0.003, 0.24, 6), suitDark, [0.0, 0.92, 0.088], [0.1, 0, 0]);
     const patch = add(body, new THREE.CircleGeometry(0.03, 40), new THREE.MeshStandardMaterial({ map: patchTexture(), roughness: 0.8 }), [-0.062, 0.975, 0.083], [-0.18, -0.38, 0]);
     patch.renderOrder = 1;
-    add(body, new THREE.PlaneGeometry(0.06, 0.022), new THREE.MeshStandardMaterial({ map: nameTagTexture('נועם'), roughness: 0.8 }), [0.064, 0.985, 0.083], [-0.18, 0.38, 0]);
+    add(body, new THREE.PlaneGeometry(0.06, 0.022), new THREE.MeshStandardMaterial({ map: nameTagTexture(tt('נועם', 'Noam')), roughness: 0.8 }), [0.064, 0.985, 0.083], [-0.18, 0.38, 0]);
     // יחידת בקרה על החזה
     const dcm = add(body, new THREE.BoxGeometry(0.09, 0.05, 0.03), suitDark, [0, 0.86, 0.085], [-0.05, 0, 0]);
     for (const [x, col] of [[-0.025, '#e8453c'], [0, '#41c463'], [0.025, '#f2b640']]) {
