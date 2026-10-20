@@ -10,13 +10,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_audio as ga  # noqa: E402
 
 OUT = ga.ROOT / "audio-samples" / "en"
+# איך לכתוב את השם "Noam" כדי שנועם יבטא אותו נכון באנגלית (no-AHM). הטקסט שמוצג באתר נשאר "Noam".
 SENTENCES = [
-    "Hi!",
     "I’m Noam, and I’ll be your guide.",
-    "That means if you lived there, you would have a birthday almost four times a year!",
-    "They all move around the Sun in the same direction, like race cars on a track, and almost on the same flat level, as if they were on a giant table.",
-    "Notice that its axis is a little bit tilted, and that is why we have seasons: summer, fall, winter and spring.",
-    "One whole trip around the center of the galaxy takes about two hundred and thirty million years.",
+    "I’m No-ahm, and I’ll be your guide.",
+    "I’m Noh-ahm, and I’ll be your guide.",
+    "I’m Noh ahm, and I’ll be your guide.",
+    "I’m Noe-ahm, and I’ll be your guide.",
+    "Hi! I’m No-ahm, and I’ll be your guide. Welcome to the solar system!",
 ]
 
 
@@ -27,8 +28,8 @@ async def main():
     rows = []
     for n, s in enumerate(SENTENCES, 1):
         print(f"[{n}/{len(SENTENCES)}] {s}")
-        await engine.save(s, OUT / f"{n}.mp3")
-        rows.append(f'<section><p>{s}</p><audio controls preload="none" src="{n}.mp3"></audio></section>')
+        await engine.save(s, OUT / f"name-{n}.mp3", chunks=[s])
+        rows.append(f'<section><p>{s}</p><audio controls preload="none" src="name-{n}.mp3"></audio></section>')
     (OUT / "index.html").write_text(
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Noam in English</title>'
