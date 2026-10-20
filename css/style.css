@@ -404,14 +404,11 @@ body.term-open #panel { visibility: hidden; }
   .chip { min-width: 58px; font-size: 12px; }
   .presenter { width: 150px; height: 135px; }
   .hide-phone { display: none; }
-  /* בטלפון יש שבעה כפתורים בשורה העליונה – מקטינים את כפתורי הסמלים כדי שכולם ייכנסו */
+  /* בטלפון יש שישה כפתורים בשורה העליונה – מקטינים את כפתורי הסמלים כדי שכולם ייכנסו */
   .actions { gap: 4px; }
   .btn-icon { min-width: 36px; padding: 6px 8px; }
 }
-/* בטלפון צר במיוחד כפתור השפה עובר לחלון ההגדרות */
-@media (max-width: 380px) {
-  #btn-lang { display: none; }
-}
+.settings-guide { display: block; margin-top: 12px; }
 .settings-lang { display: block; margin-top: 10px; font-size: 13px; color: var(--accent); }
 
 /* בחלונות ההסבר מותר רק לגלול למעלה ולמטה, בלי צביטה שמגדילה את כל הדף */

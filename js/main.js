@@ -1591,8 +1591,7 @@ $('btn-guide').addEventListener('click', () => {
   guideOn = !guideOn;
   presenterEl.hidden = !guideOn;
   $('btn-guide').setAttribute('aria-pressed', String(guideOn));
-  $('btn-guide').title = guideOn ? tt('הסתרת נועם המדריך', 'Hide Noam the guide') : tt('הצגת נועם המדריך', 'Show Noam the guide');
-  $('btn-guide').style.opacity = guideOn ? '' : '0.5';
+  $('btn-guide').textContent = guideOn ? tt('👦 הסתרת נועם המדריך', '👦 Hide Noam the guide') : tt('👦 הצגת נועם המדריך', '👦 Show Noam the guide');
 });
 let selected = null;
 
