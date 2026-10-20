@@ -460,6 +460,19 @@ const TRAIL_POINTS = 600;
 const MOTION_MIN_SPEED = 25; // במצב הזה הזמן רץ לפחות 25 ימים בשנייה, כדי לראות את כוכבי הלכת מסתובבים
 const galaxyInfo = { data: GALAXY_MOTION, isGalaxy: true, moons: [], group: new THREE.Object3D() };
 let motionMix = 0, motionTarget = 0, trailGrow = 0, speedBoostShown = false;
+// מעברים רכים בין התחנות: כל אפקט מתקדם ב־p (ליניארי), והמראה עצמו לפי עקומה רכה (מתחיל ונגמר בעדינות).
+// בזמן טיסה המעבר נמשך כחצי מהטיסה: מה שנעלם – מתחילת הטיסה, ומה שמופיע – אחרי שליש ממנה, כשהמצלמה כבר בדרך.
+const fadeP = { motion: 0, milky: 0, bh: 0 };
+function stepFade(key, target, up, down, dt) {
+  let p = fadeP[key];
+  if (p !== target) {
+    const len = tween ? Math.max(0.6, tween.duration * 0.55) : target > p ? up : down;
+    if (target > p && !(tween && tween.e < 0.33)) p = Math.min(1, p + dt / len);
+    else if (target < p) p = Math.max(0, p - dt / len);
+    fadeP[key] = p;
+  }
+  return p * p * (3 - 2 * p);
+}
 let trails = [], dust = null, motionArrow = null, sunTail = null;
 
 function softDot() {
@@ -536,9 +549,7 @@ const motionTmp = new THREE.Vector3();
 const ORIGIN = new THREE.Vector3();
 const BACKWARD = GALAXY_DIR.clone().negate();
 function updateGalaxyMotion(dt) {
-  if (motionMix !== motionTarget) {
-    motionMix = motionTarget > motionMix ? Math.min(1, motionMix + dt / 1.5) : Math.max(0, motionMix - dt / 1.5);
-  }
+  motionMix = stepFade('motion', motionTarget, 1.5, 1.5, dt);
   // בכניסה למצב, השבילים "נמתחים" מאחורי השמש במשך כמה שניות
   trailGrow = motionTarget ? Math.min(1, trailGrow + dt / 6) : motionMix > 0 ? trailGrow : 0;
   const on = motionMix > 0.001;
@@ -756,7 +767,7 @@ const milky = (() => {
 
   // השמיים: אותה גלקסיה בדיוק, כפי שהיא נראית מהמקום של השמש – תמונה שמצוירת מראש מאותו מודל
   // (tools/paint-sky.mjs), עם מיליוני כוכבים ועננים של אבק. הכדור נע עם המצלמה, ולכן השמיים תמיד "באינסוף".
-  const skyMap = imageTexture('textures/sky/galaxy.jpg');
+  const skyMap = imageTexture(window.innerWidth <= 720 ? 'textures/sky/galaxy-2k.jpg' : 'textures/sky/galaxy.jpg');
   const skyDome = new THREE.Mesh(
     new THREE.SphereGeometry(40000, 96, 48),
     new THREE.MeshBasicMaterial({ map: skyMap, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }),
@@ -791,9 +802,12 @@ function placeMilkyLabel(el, worldPos, dy) {
 }
 
 function updateMilkyWay(dt) {
-  if (milkyMix !== milkyTarget) {
-    milkyMix = milkyTarget > milkyMix ? Math.min(1, milkyMix + dt / 2.5) : Math.max(0, milkyMix - dt / 1.5);
-  }
+  if (tween?.milky) {
+    // בטיסה אל שביל החלב או ממנו, הגלקסיה מבחוץ מופיעה לפי המרחק – כשיוצאים ממנה, ולא לפי השעון
+    const k = THREE.MathUtils.clamp((Math.log(camera.position.length()) - Math.log(1800)) / (Math.log(16000) - Math.log(1800)), 0, 1);
+    fadeP.milky = k;
+    milkyMix = k * k * (3 - 2 * k);
+  } else milkyMix = stepFade('milky', milkyTarget, 2.5, 1.5, dt);
   if (milkyTarget || motionTarget || bhTarget) milky.load();
   // בתחנות "טסים בחלל" ו"חור שחור" שביל החלב שברקע הוא הגלקסיה מהקוד, כפי שהיא נראית מבפנים (במקום הצילום)
   const inside = Math.max(motionMix, bhMix) * (1 - milkyMix);
@@ -828,14 +842,18 @@ function updateMilkyWay(dt) {
   milky.holder.rotation.y -= dt * 0.025;
   // עם הזוהר (bloom) המרכז הבהיר מתפשט על כל המסך – מחלישים את שכבת הזוהר והליבה
   const glowK = bloomOn ? 0.45 : 1;
-  milky.disk.material.opacity = milkyMix * 0.9 * glowK;
+
+  // בזמן שהמצלמה עוברת בין הכוכבים (בדרך החוצה או חזרה) הכוכבים הקרובים לא הופכים לכתמים ענקיים
+  const out = THREE.MathUtils.smoothstep(camera.position.distanceTo(galaxyGroup.position), 0.9 * GAL_R, 2.1 * GAL_R);
   for (const m of [milky.starsMat, milky.dustMat, milky.glowMat]) {
-    m.uniforms.uMaxPx.value = 1e4;
-    m.uniforms.uNear.value = 0;
+    m.uniforms.uMaxPx.value = Math.exp(THREE.MathUtils.lerp(Math.log(3 * renderer.getPixelRatio()), Math.log(1e4), out * out));
+    m.uniforms.uNear.value = (1 - out) * 0.04 * GAL_SUN_R;
     m.uniforms.uOpacity.value = milkyMix;
     m.uniforms.uTime.value = t;
     m.uniforms.uScale.value = (renderer.domElement.height / 2) / Math.tan((camera.fov * DEG) / 2);
   }
+  // שכבת הזוהר השטוחה נראית טוב רק מרחוק; מקרוב (בדרך פנימה) היא נראית כמו ריבוע מטושטש
+  milky.disk.material.opacity = milkyMix * 0.9 * glowK * out;
   milky.core.material.opacity = milkyMix * glowK * (0.22 + 0.08 * Math.sin(t * 0.8)); // הליבה "נושמת"
   milky.here.material.opacity = milkyMix * (0.75 + 0.25 * Math.sin(t * 3.3));
   milky.sunAnchor.getWorldPosition(milky.here.position);
@@ -899,13 +917,13 @@ const blackHole = (() => {
         d = normalize(uDomeRot * normalize(uToWorld * d));
         vec2 uv = vec2(atan(d.z, -d.x) / 6.2831853 + 0.5, 1.0 - acos(clamp(d.y, -1.0, 1.0)) / 3.1415927);
         uv.x = fract(uv.x - 0.5);
-        vec3 c = texture2D(uDome, uv).rgb * 0.32;
+        vec3 c = texture2D(uDome, uv).rgb; // בדיוק כמו כדור השמיים, כדי שלא ייראה גבול
         vec3 q = d * 260.0, cell = floor(q);
         float h = hash3(cell);
-        if (h > 0.93) {
+        if (h > 0.975) {
           vec3 sp = cell + 0.5 + 0.3 * (vec3(hash3(cell + 1.3), hash3(cell + 2.7), hash3(cell + 4.1)) - 0.5);
           float k = smoothstep(0.32, 0.0, length(q - sp));
-          c += k * (h - 0.93) * 14.0 * mix(vec3(1.0, 0.85, 0.7), vec3(0.75, 0.85, 1.0), hash3(cell + 7.7));
+          c += k * (h - 0.975) * 30.0 * mix(vec3(1.0, 0.85, 0.7), vec3(0.75, 0.85, 1.0), hash3(cell + 7.7));
         }
         return c;
       }
@@ -991,7 +1009,7 @@ const blackHole = (() => {
 
 const bhTmp = new THREE.Matrix4();
 function updateBlackHole(dt) {
-  if (bhMix !== bhTarget) bhMix = bhTarget > bhMix ? Math.min(1, bhMix + dt / 2) : Math.max(0, bhMix - dt / 1.5);
+  bhMix = stepFade('bh', bhTarget, 2, 1.5, dt);
   blackHole.mesh.visible = bhMix > 0.001;
   if (!blackHole.mesh.visible) return;
   const u = blackHole.mat.uniforms;
@@ -1357,26 +1375,58 @@ function flyTo(body, duration = null, pose = null) {
     offset = out.negate().applyAxisAngle(new THREE.Vector3(0, 1, 0), 40 * DEG).multiplyScalar(dist);
     offset.y = dist * 0.35;
   }
-  // טיסה ארוכה יותר כשהדרך ארוכה (למשל במרחקים אמיתיים)
-  const travel = from.target.distanceTo(body ? body.group.position : new THREE.Vector3());
-  tween = { from, offset, body, pose, t: 0, duration: duration ?? 1.8 + Math.min(1.7, travel / 600) };
+  // הטיסה: המרחק מהמצלמה למה שמסתכלים עליו משתנה בקצב קבוע ב"סדרי גודל" (לוגריתמי) – כמו זום –
+  // ואם הדרך ארוכה, המצלמה קודם מתרחקת כדי לראות גם את נקודת ההתחלה וגם את היעד, ואז מתקרבת.
+  // כך גם טיסה מכוכב לכת אל שביל החלב (פי אלפים במרחק) נראית רציפה, בלי "נפילה" פתאומית בסוף.
+  const toTarget = body ? body.group.position.clone() : new THREE.Vector3();
+  const toPos = body ? toTarget.clone().add(offset) : pose ? pose() : overviewPosition();
+  const r0 = Math.max(1e-3, from.pos.distanceTo(from.target)), r1 = Math.max(1e-3, toPos.distanceTo(toTarget));
+  const travel = from.target.distanceTo(toTarget);
+  const rPeak = Math.max(r0, r1, travel * 0.7);
+  const la = Math.log(r0), lb = Math.log(r1);
+  // נקודת הביקורת של עקומת בזייה (ריבועית) בסולם הלוגריתמי: באמצע הדרך המרחק מגיע בערך ל־rPeak
+  const lc = rPeak > Math.max(r0, r1) * 1.05 ? 2 * Math.log(rPeak) - (la + lb) / 2 : (la + lb) / 2;
+  const logR = (e) => (1 - e) ** 2 * la + 2 * e * (1 - e) * lc + e * e * lb;
+  // נקודת המבט זזה מהר כשרחוקים ולאט כשקרובים (כך שעל המסך היא זזה בקצב אחיד)
+  const cum = [0];
+  for (let i = 1; i <= 64; i++) cum.push(cum[i - 1] + Math.exp(logR((i - 0.5) / 64)));
+  const along = cum.map((v) => v / cum[64]);
+  const zoom = Math.abs(lb - la) + 2 * (lc - (la + lb) / 2);
+  tween = {
+    from, offset, body, pose, t: 0, e: 0, logR, along,
+    milky: body === milkyInfo || followBody === milkyInfo,
+    avoid: Math.min(sizeOf(sun) * 5, toPos.length() * 0.9),
+    dir0: from.pos.clone().sub(from.target).divideScalar(r0),
+    duration: duration ?? Math.min(4.5, 1.6 + 0.12 * zoom + Math.min(0.8, travel / 1500)),
+  };
   followBody = body;
   controls.enabled = false;
   controls.minDistance = body ? sizeOf(body) * 1.6 : 5;
 }
 
+const camQ = new THREE.Quaternion(), camQ1 = new THREE.Quaternion(), camDir = new THREE.Vector3();
 function updateCamera(dt) {
   if (tween) {
     tween.t = Math.min(1, tween.t + dt / tween.duration);
-    const e = tween.t < 0.5 ? 4 * tween.t ** 3 : 1 - (-2 * tween.t + 2) ** 3 / 2;
-    const targetPos = tween.body ? tween.body.group.position : new THREE.Vector3();
-    const camPos = tween.body ? targetPos.clone().add(tween.offset) : tween.pose ? tween.pose() : overviewPosition();
-    camera.position.lerpVectors(tween.from.pos, camPos, e);
-    // מעוף בקשת כלפי מעלה, ולא דרך השמש
-    camera.position.y += Math.sin(Math.PI * e) * tween.from.pos.distanceTo(camPos) * 0.35;
-    const minR = sizeOf(sun) * 2.2;
+    const t = tween.t;
+    const e = (tween.e = t * t * t * (t * (6 * t - 15) + 10)); // התחלה וסיום רכים מאוד
+    const targetPos = tween.body ? tween.body.group.position : ORIGIN;
+    const camPos = tween.body ? tmp.copy(targetPos).add(tween.offset) : tween.pose ? tween.pose() : overviewPosition();
+    // היעד עשוי לזוז בזמן הטיסה (כוכב לכת מסתובב), ולכן הכיוון והמרחק בסוף מחושבים מחדש בכל פריים
+    camDir.subVectors(camPos, targetPos);
+    const r1 = Math.max(1e-3, camDir.length());
+    camDir.divideScalar(r1);
+    camQ1.setFromUnitVectors(tween.dir0, camDir);
+    camQ.identity().slerp(camQ1, e);
+    const k = e * 64, i = Math.min(63, Math.floor(k));
+    const s = tween.along[i] + (tween.along[i + 1] - tween.along[i]) * (k - i);
+    controls.target.lerpVectors(tween.from.target, targetPos, s);
+    // המרחק: לפי העקומה הלוגריתמית, עם תיקון קטן אם היעד זז מאז תחילת הטיסה
+    const r = Math.exp(tween.logR(e)) * (1 + (r1 / Math.exp(tween.logR(1)) - 1) * e);
+    camera.position.copy(tween.dir0).applyQuaternion(camQ).multiplyScalar(r).add(controls.target);
+    // לא עוברים דרך השמש והזוהר שלה בדרך
+    const minR = Math.max(sizeOf(sun) * 2.2, tween.avoid);
     if (camera.position.length() < minR) camera.position.setLength(minR);
-    controls.target.lerpVectors(tween.from.target, targetPos, e);
     if (tween.t >= 1) {
       tween = null;
       controls.enabled = true;
