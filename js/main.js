@@ -1691,9 +1691,15 @@ function placePresenter() {
       x = w - pw - 4;
       y = r.top - ph + 18;
     } else {
-      x = r.right - 6;
       y = Math.min(r.bottom, chooserTop()) - ph;
-      lookSide = -1;
+      // נועם עומד בצד של חלון ההסבר שיש בו מקום (בעברית החלון משמאל, באנגלית מימין)
+      if (r.right - 6 + pw <= w + 20) {
+        x = r.right - 6;
+        lookSide = -1;
+      } else {
+        x = r.left - pw + 6;
+        lookSide = 1;
+      }
     }
   } else if (phone) {
     x = w - pw - 4;
@@ -1812,8 +1818,9 @@ function linkTerms(text, used) {
       plain += text[i++];
       continue;
     }
+    const shown = text.slice(i, i + match.form.length); // באנגלית שומרים על האות הגדולה כפי שנכתבה
     if (used.has(match.term.id)) {
-      plain += match.form;
+      plain += shown;
       i += match.form.length;
       continue;
     }
@@ -1823,7 +1830,7 @@ function linkTerms(text, used) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'term';
-    btn.textContent = match.form;
+    btn.textContent = shown;
     btn.title = tt('מה זה ', 'What is ') + match.term.title + '?';
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
