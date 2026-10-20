@@ -255,7 +255,7 @@ export const TOUR_INTRO = [
     id: 'welcome',
     title: 'Welcome to the solar system!',
     narration:
-      'Hi! I’m Noam, and I’ll be your guide. Welcome to the solar system! In the center is the Sun, and eight planets circle around it. ' +
+      'Hi! I’m Ofek, and I’ll be your guide. Welcome to the solar system! In the center is the Sun, and eight planets circle around it. ' +
       'They all move around the Sun in the same direction, like race cars on a track, and almost on the same flat level, as if they were on a giant table. ' +
       'What keeps them on their path is the Sun’s gravity.',
   },

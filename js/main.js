@@ -1528,7 +1528,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 const narrator = new Narrator();
 let voiceOn = true;
 
-// ---------- נועם, הילד שמציג את ההסברים ----------
+// ---------- אופק, הילד שמציג את ההסברים ----------
 const presenterEl = $('presenter');
 const presenter = new Presenter(presenterEl);
 presenter.setSize(presenterEl.clientWidth, presenterEl.clientHeight);
@@ -1543,7 +1543,7 @@ const chooserTop = () => {
   return c.offsetParent ? c.getBoundingClientRect().top - 4 : window.innerHeight - 8;
 };
 
-// ממקם את נועם ליד מה שהוא מסביר: כרטיס הפתיחה, חלון ההסבר, או בפינה
+// ממקם את אופק ליד מה שהוא מסביר: כרטיס הפתיחה, חלון ההסבר, או בפינה
 function placePresenter() {
   const w = window.innerWidth, h = window.innerHeight;
   const pw = presenterEl.clientWidth, ph = presenterEl.clientHeight;
@@ -1567,7 +1567,7 @@ function placePresenter() {
       y = r.top - ph + 18;
     } else {
       y = Math.min(r.bottom, chooserTop()) - ph;
-      // נועם עומד בצד של חלון ההסבר שיש בו מקום (בעברית החלון משמאל, באנגלית מימין)
+      // אופק עומד בצד של חלון ההסבר שיש בו מקום (בעברית החלון משמאל, באנגלית מימין)
       if (r.right - 6 + pw <= w + 20) {
         x = r.right - 6;
         lookSide = -1;
@@ -1591,7 +1591,7 @@ $('btn-guide').addEventListener('click', () => {
   guideOn = !guideOn;
   presenterEl.hidden = !guideOn;
   $('btn-guide').setAttribute('aria-pressed', String(guideOn));
-  $('btn-guide').textContent = guideOn ? tt('👦 הסתרת נועם המדריך', '👦 Hide Noam the guide') : tt('👦 הצגת נועם המדריך', '👦 Show Noam the guide');
+  $('btn-guide').textContent = guideOn ? tt('👦 הסתרת אופק המדריך', '👦 Hide Ofek the guide') : tt('👦 הצגת אופק המדריך', '👦 Show Ofek the guide');
 });
 let selected = null;
 
@@ -1743,7 +1743,7 @@ function openTerm(term, from = 'panel') {
   $('term-list').hidden = true;
   $('term-emoji').textContent = term.emoji;
   $('term-title').textContent = term.title;
-  $('term-kicker').textContent = term.kicker || tt('נועם מסביר מושג', 'Noam explains');
+  $('term-kicker').textContent = term.kicker || tt('אופק מסביר מושג', 'Ofek explains');
   $('term-text').replaceChildren(
     ...splitSentences(term.text).flatMap((s) => {
       const span = document.createElement('span');
@@ -1795,7 +1795,7 @@ for (const term of GLOSSARY) {
 }
 
 // סוגר את כרטיס המושג וממשיך את מה שהיה לפניו (ההקראה או הסיור)
-// חוזרים מהמושג להסבר הכללי. אם נועם היה באמצע הסבר או סיור, הוא שואל אם להמשיך.
+// חוזרים מהמושג להסבר הכללי. אם אופק היה באמצע הסבר או סיור, הוא שואל אם להמשיך.
 let pendingResume = null;
 function closeTerm() {
   const st = termState;
@@ -1822,7 +1822,7 @@ $('ask-yes').addEventListener('click', () => {
   if (st.resume) speakCurrent(st.resume.onEnd, st.resume.index);
   else if (tour && tour.index < tourSteps.length - 1) goToStep(tour.index + 1);
 });
-// "לא עכשיו": נועם עוצר. בסיור אפשר להמשיך בכפתור "הבא"
+// "לא עכשיו": אופק עוצר. בסיור אפשר להמשיך בכפתור "הבא"
 $('ask-no').addEventListener('click', () => {
   hideAsk();
   narrator.stop();
@@ -1985,7 +1985,7 @@ function showComets() {
   $('panel-moons').hidden = false;
 }
 
-// נועם מסביר על ירח, באותו כרטיס של המושגים
+// אופק מסביר על ירח, באותו כרטיס של המושגים
 function openMoon(m) {
   if (selected !== m.planet) {
     if (tour) endTour();
@@ -2028,8 +2028,8 @@ function showSettings() {
   $('rate').value = speed;
   $('pitch-value').textContent = percent(pitch);
   $('rate-value').textContent = percent(speed);
-  const voice = narrator.hasRecordings ? tt('הקול של נועם (קבצים מוקלטים)', "Noam's voice (recorded files)") : tt('קול הדפדפן', 'Browser voice');
-  const last = { files: tt('הקול של נועם', "Noam's voice"), browser: tt('קול הדפדפן', 'Browser voice'), none: tt('בלי קול', 'No voice') }[narrator.status];
+  const voice = narrator.hasRecordings ? tt('הקול של אופק (קבצים מוקלטים)', "Ofek's voice (recorded files)") : tt('קול הדפדפן', 'Browser voice');
+  const last = { files: tt('הקול של אופק', "Ofek's voice"), browser: tt('קול הדפדפן', 'Browser voice'), none: tt('בלי קול', 'No voice') }[narrator.status];
   $('voice-status').textContent =
     tt(`קול זמין: ${voice}`, `Available voice: ${voice}`) + (last ? tt(` · הושמע לאחרונה: ${last}`, ` · Last played: ${last}`) : '') + (narrator.lastError ? tt(` · שגיאה: ${narrator.lastError}`, ` · Error: ${narrator.lastError}`) : '');
 }
@@ -2125,7 +2125,7 @@ function goToStep(i) {
   }
 }
 
-// ---------- הפתיחה של הסיור: כל משפט של נועם מפעיל משהו על המסך ----------
+// ---------- הפתיחה של הסיור: כל משפט של אופק מפעיל משהו על המסך ----------
 // show = האפקטים של התחנה הנוכחית. כשעוזבים את התחנה (הבא, הקודם, סיום, בחירה אחרת) הכול חוזר למצב הרגיל.
 let show = null;
 let sunPulse = 99;

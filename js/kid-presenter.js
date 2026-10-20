@@ -1,6 +1,6 @@
-// נועם – ילד בן 6–7 בחליפת חלל שמציג את ההסברים.
+// אופק – ילד בן 6–7 בחליפת חלל שמציג את ההסברים.
 // הגוף והפנים הם מודל תלת־ממדי מוכן עם שלד מלא ולסת ("Kid-character-fully-rigged" של Guilherme Navarro, CC BY 4.0).
-// חליפת החלל, האוזניות, התג והחיבורים נוספו בקוד. המודל נטען ברקע; אם הטעינה נכשלת חוזרים לנועם הישן (presenter.js).
+// חליפת החלל, האוזניות, התג והחיבורים נוספו בקוד. המודל נטען ברקע; אם הטעינה נכשלת חוזרים לאופק הישן (presenter.js).
 // היחידות הן מטרים. הילד מביט אל +z, וצד ימין שלו הוא −x.
 
 import * as THREE from 'three';
@@ -102,16 +102,16 @@ export class Presenter {
       try {
         this.build(gltf.scene);
       } catch (err) {
-        console.warn('Noam model failed, using procedural Noam', err);
+        console.warn('Ofek model failed, using procedural Ofek', err);
         this.useFallback();
       }
     }, undefined, (err) => {
-      console.warn('Noam model failed to load, using procedural Noam', err);
+      console.warn('Ofek model failed to load, using procedural Ofek', err);
       this.useFallback();
     });
   }
 
-  // אם המודל לא נטען (למשל בלי רשת) – חוזרים לנועם שנבנה כולו בקוד
+  // אם המודל לא נטען (למשל בלי רשת) – חוזרים לאופק שנבנה כולו בקוד
   useFallback() {
     if (this.fallback) return;
     this.renderer.domElement.remove();
@@ -238,7 +238,7 @@ export class Presenter {
       panel.add(l);
     }
     attach('Boy_Spine2', mesh(new THREE.CircleGeometry(0.03, 40), new THREE.MeshStandardMaterial({ map: patchTexture(), roughness: 0.8 })), [0.06, 0.13, 0.087], euler(-0.15, 0.35, 0));
-    attach('Boy_Spine2', mesh(new THREE.PlaneGeometry(0.06, 0.022), new THREE.MeshStandardMaterial({ map: nameTagTexture(tt('נועם', 'Noam')), roughness: 0.8 })), [-0.062, 0.14, 0.087], euler(-0.15, -0.35, 0));
+    attach('Boy_Spine2', mesh(new THREE.PlaneGeometry(0.06, 0.022), new THREE.MeshStandardMaterial({ map: nameTagTexture(tt('אופק', 'Ofek')), roughness: 0.8 })), [-0.062, 0.14, 0.087], euler(-0.15, -0.35, 0));
     attach('Boy_Spine2', mesh(new THREE.BoxGeometry(0.2, 0.26, 0.09), new THREE.MeshStandardMaterial({ color: '#d7dbe1', roughness: 0.7 })), [0, 0.04, -0.1]);
 
     // אוזניות עם מיקרופון

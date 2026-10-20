@@ -1,9 +1,9 @@
-// Glossary for kids. Every term in the explanations becomes tappable, and Noam explains it.
+// Glossary for kids. Every term in the explanations becomes tappable, and Ofek explains it.
 //
 // forms - the ways the term appears in the narration (lowercase). Matching is
 //         case-insensitive and whole-word. Each term is linked only once per
 //         explanation, the first time it appears.
-// text  - the explanation Noam reads aloud.
+// text  - the explanation Ofek reads aloud.
 
 export const GLOSSARY = [
   {
@@ -332,7 +332,7 @@ export const GLOSSARY = [
   },
 ];
 
-// The question Noam asks when we go back from a term to the main explanation
+// The question Ofek asks when we go back from a term to the main explanation
 export const CONTINUE_QUESTION = 'Want me to keep explaining?';
 
 // Search order: longer forms first, so "dwarf planet" is matched before "planet"

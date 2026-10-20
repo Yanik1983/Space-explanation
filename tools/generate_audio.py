@@ -2,7 +2,7 @@
 """יוצר קבצי שמע (MP3) לכל משפט בהסברים.
 
 מנועי קול:
-  voxcpm    – הקול של נועם: VoxCPM2 (קוד פתוח, Apache-2.0) שמשבט את tools/voices/noam.wav.
+  voxcpm    – הקול של אופק: VoxCPM2 (קוד פתוח, Apache-2.0) שמשבט את tools/voices/noam.wav.
               זה המנוע שהאתר משתמש בו. איטי על מעבד רגיל, ולכן ב־GitHub Actions
               הוא רץ ב־20 חלקים במקביל (--shard) ואחר כך --finalize מעדכן את manifest.json.
   edge      – הקולות העבריים של Microsoft Edge (edge-tts). שירות לא רשמי שנחסם לפעמים.
@@ -36,10 +36,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 AUDIO = ROOT / "audio"
-LANG = "he"  # "en": האנגלית נשמרת ב־audio/en/ ומשתמשת בקול של נועם ללא טקסט ההתייחסות העברי
+LANG = "he"  # "en": האנגלית נשמרת ב־audio/en/ ומשתמשת בקול של אופק ללא טקסט ההתייחסות העברי
 MODELS = ROOT / ".cache" / "tts-models"
 
-# ---- edge: הקול של נועם. אפשר לנסות גם he-IL-HilaNeural.
+# ---- edge: הקול של אופק. אפשר לנסות גם he-IL-HilaNeural.
 # pitch מרים את הטון כדי שיישמע צעיר; ערכים בין +15Hz ל־+30Hz נשמעים טוב.
 EDGE_VOICE = "he-IL-AvriNeural"
 EDGE_PITCH = "+25Hz"
@@ -55,7 +55,7 @@ PHONIKUD_PITCH = 1.15
 PHONIKUD_SPEED = 1.0  # מעל 1 = מהר יותר
 
 
-# ---- voxcpm: הקול של נועם (B1) – שיבוט של tools/voices/noam.wav בעזרת VoxCPM2.
+# ---- voxcpm: הקול של אופק (B1) – שיבוט של tools/voices/noam.wav בעזרת VoxCPM2.
 # איטי על מעבד רגיל (פי 40–50 מאורך הדיבור), ולכן ב־GitHub Actions מחלקים לכמה ריצות במקביל (--shard).
 VOXCPM_REF = ROOT / "tools" / "voices" / "noam.wav"
 VOXCPM_SEED = 1
@@ -214,8 +214,8 @@ class VoxCPMEngine:
         for i, chunk in enumerate(chunks or (v2_chunks(sentence) if v2 else comma_chunks(sentence))):
             torch.manual_seed(VOXCPM_SEED)
             if LANG == "en":
-                chunk = chunk.replace("Noam", "נועם")  # באנגלית השם נשמע לא נכון; בכתיבה עברית הוא מבוטא כמו שנועם אומר אותו
-                # קול של נועם בשפה אחרת: רק הדגימה כהתייחסות לגוון, בלי להמשיך את הטקסט העברי שלה
+                chunk = chunk.replace("Ofek", "אופק")  # באנגלית השם נשמע לא נכון; בכתיבה עברית הוא מבוטא כמו שאופק אומר אותו
+                # קול של אופק בשפה אחרת: רק הדגימה כהתייחסות לגוון, בלי להמשיך את הטקסט העברי שלה
                 wav = self.model.generate(text=chunk, reference_wav_path=str(VOXCPM_REF),
                                           cfg_value=2.0, inference_timesteps=10)
             else:

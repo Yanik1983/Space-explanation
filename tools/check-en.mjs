@@ -5,7 +5,7 @@ import { splitSentences } from '../js/speech.js';
 const FILES = ['data', 'glossary', 'moons', 'comets'];
 const SAME = new Set(['id', 'color', 'emoji', 'perihelion']); // שדות שחייבים להישאר זהים
 const LOOSE_LENGTH = new Set(['forms', 'notBefore']); // ברשימות האלה אורך שונה מותר
-const SPOKEN = new Set(['narration', 'text']); // טקסט שנועם מקריא
+const SPOKEN = new Set(['narration', 'text']); // טקסט שאופק מקריא
 const errors = [];
 const HEBREW = /[֐-׿]/;
 

@@ -256,7 +256,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; }
 
-/* ---------- נועם שואל אם להמשיך ---------- */
+/* ---------- אופק שואל אם להמשיך ---------- */
 .ask {
   margin: 12px 0 4px;
   padding: 12px 14px;
@@ -351,7 +351,7 @@ body.term-open #panel { visibility: hidden; }
 }
 .hint { font-size: 14px !important; margin: 16px 0 0 !important; }
 
-/* ---------- נועם המדריך ---------- */
+/* ---------- אופק המדריך ---------- */
 .presenter {
   position: fixed;
   left: 0;
