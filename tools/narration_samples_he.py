@@ -43,17 +43,23 @@ GROUPS = [
 
 
 async def main():
+    # --only קבוצה1,קבוצה2: מקליט רק קבוצות מסוימות (בגיטהאב כל קבוצה רצה בנפרד, במקביל)
+    only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
     ga.set_lang("he")
     OUT.mkdir(parents=True, exist_ok=True)
     engine = ga.VoxCPMEngine(None, style="v2")
     rows = []
     for key, base, words in GROUPS:
+        if only and key not in only:
+            continue
         rows.append(f"<h2>{base.format(w='…')}</h2>")
         for n, w in enumerate(words, 1):
             text = base.format(w=w)
             print(f"[{key} {n}/{len(words)}] {text}")
             await engine.save(text, OUT / f"{key}-{n}.mp3", chunks=[text])
             rows.append(f'<section><p>{n}: {w}</p><audio controls preload="none" src="{key}-{n}.mp3"></audio></section>')
+    if only:
+        return
     (OUT / "index.html").write_text(
         '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1"><title>הגייה</title>'

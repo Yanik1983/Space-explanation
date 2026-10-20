@@ -17,6 +17,10 @@ jobs:
     if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [ellipse2, ellipse-sing, jupiter-to, jupiter, planets-the, venus3, venus-punct]
     steps:
       - uses: actions/checkout@v4
 
@@ -36,13 +40,16 @@ jobs:
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install voxcpm soundfile
 
-      - run: python3 tools/narration_samples_he.py
+      - run: python3 tools/narration_samples_he.py --only ${{ matrix.group }}
 
       - name: Commit samples
         run: |
           git add audio-samples/he
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Update Hebrew word samples" || exit 0
-          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
-          git push origin "HEAD:$GITHUB_REF_NAME"
+          git commit -m "Update Hebrew word samples (${{ matrix.group }})" || exit 0
+          for i in 1 2 3 4 5 6; do
+            git pull --rebase -X theirs origin "$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep $((RANDOM % 10 + 3))
+          done
+          exit 1
