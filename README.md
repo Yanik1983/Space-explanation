@@ -100,5 +100,5 @@ python3 -m http.server 8000
 - הטקסטים הארוכים נמצאים ב־`js/en/` (`data.js`, `glossary.js`, `moons.js`, `comets.js`), באותו מבנה בדיוק כמו הקבצים העבריים. `js/content.js` טוען את הקבצים של השפה הנוכחית.
 - טקסטים קצרים בקוד נכתבים כ־`tt('עברית', 'English')` (מ־`js/i18n.js`).
 - אחרי שמשנים טקסט עברי (או מוסיפים מושג, ירח וכדומה) מריצים `node tools/check-en.mjs`: הוא בודק שלקבצים האנגליים יש אותו מבנה, שלא נשארה עברית, ושאין נקודה עשרונית בטקסט שמוקרא (כי משפט נחתך בנקודה).
-- הקול באנגלית נוצר ל־`audio/en/` באותו כלי (`python3 tools/generate_audio.py --engine voxcpm --lang en`). עד שהוא מוכן, האתר מקריא בקול אנגלי של הדפדפן, אם יש.
+- הקול באנגלית נוצר ל־`audio/en/` באותו כלי (`python3 tools/generate_audio.py --engine voxcpm --lang en`), ובגיטהאב על ידי `.github/workflows/narration-audio-en.yml`. את השם Noam מקליטים בכתיבה עברית (נועם), כי כך נועם מבטא אותו נכון. עד שהקול מוכן, האתר מקריא בקול אנגלי של הדפדפן, אם יש.
 - `node tools/bump-version.mjs` מעדכן את שני דפי ה־HTML.

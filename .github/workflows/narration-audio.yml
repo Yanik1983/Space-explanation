@@ -110,5 +110,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Update narration audio"
-          git pull --rebase origin "$GITHUB_REF_NAME"
+          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"

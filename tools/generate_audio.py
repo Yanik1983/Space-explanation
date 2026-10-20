@@ -196,7 +196,7 @@ class VoxCPMEngine:
         if style == "v2":
             self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|v2b-{V2_LONG}-{V2_COMMA_PAUSE}"
         if LANG == "en":
-            self.settings += "|en"
+            self.settings += "|en|noam-heb"
         self.model = None  # נטען רק כשבאמת צריך ליצור קול (לא ב־--finalize)
 
     async def save(self, sentence, path, chunks=None):
@@ -214,6 +214,7 @@ class VoxCPMEngine:
         for i, chunk in enumerate(chunks or (v2_chunks(sentence) if v2 else comma_chunks(sentence))):
             torch.manual_seed(VOXCPM_SEED)
             if LANG == "en":
+                chunk = chunk.replace("Noam", "נועם")  # באנגלית השם נשמע לא נכון; בכתיבה עברית הוא מבוטא כמו שנועם אומר אותו
                 # קול של נועם בשפה אחרת: רק הדגימה כהתייחסות לגוון, בלי להמשיך את הטקסט העברי שלה
                 wav = self.model.generate(text=chunk, reference_wav_path=str(VOXCPM_REF),
                                           cfg_value=2.0, inference_timesteps=10)
