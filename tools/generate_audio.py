@@ -76,7 +76,7 @@ def comma_chunks(sentence):
     return chunks
 
 
-def trim_silence(wav, sr, level=0.02, margin=0.03, fade=0.0):
+def trim_silence(wav, sr, level=0.02, margin=0.03, fade=0.0, end_margin=None, end_fade=None):
     """מוריד שקט מההתחלה ומהסוף, כדי שההפסקות יהיו בדיוק באורך שקבענו.
     fade (שניות) מוסיף דעיכה רכה בקצוות, כדי שלא יישמעו קליקים או מילה שנחתכת בבת אחת."""
     import numpy as np
@@ -84,19 +84,21 @@ def trim_silence(wav, sr, level=0.02, margin=0.03, fade=0.0):
     if not len(loud):
         return wav
     pad = int(sr * margin)
-    wav = wav[max(0, loud[0] - pad):loud[-1] + pad].copy()
+    end_pad = pad if end_margin is None else int(sr * end_margin)
+    wav = wav[max(0, loud[0] - pad):loud[-1] + end_pad].copy()
     n = min(int(sr * fade), len(wav) // 2)
     if n:
-        ramp = np.linspace(0, 1, n, dtype=np.float32)
-        wav[:n] *= ramp
-        wav[-n:] *= ramp[::-1]
+        wav[:n] *= np.linspace(0, 1, n, dtype=np.float32)
+    m = min(int(sr * (fade if end_fade is None else end_fade)), len(wav) // 2)
+    if m:
+        wav[-m:] *= np.linspace(1, 0, m, dtype=np.float32)
     return wav
 
 
 # ---- סגנון v2 (בבדיקה, tools/narration_samples.py): משפט שלם בהקלטה אחת, כדי שהטון בפסיקים יהיה טבעי.
 # רק משפט ארוך מ־V2_LONG תווים נחתך, בפסיק הקרוב ביותר לאמצע, עם הפסקה קצרה.
 V2_LONG = 80
-V2_COMMA_PAUSE = 0.1
+V2_COMMA_PAUSE = 0.06
 V2_END_PAUSE = 0.25
 
 
@@ -185,10 +187,10 @@ class VoxCPMEngine:
         ref_hash = hashlib.sha1(VOXCPM_REF.read_bytes()).hexdigest()[:8]
         self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|punct{COMMA_PAUSE}-{END_PAUSE}-{MIN_CHUNK}"
         if style == "v2":
-            self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|v2-{V2_LONG}-{V2_COMMA_PAUSE}"
+            self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|v2b-{V2_LONG}-{V2_COMMA_PAUSE}"
         self.model = None  # נטען רק כשבאמת צריך ליצור קול (לא ב־--finalize)
 
-    async def save(self, sentence, path):
+    async def save(self, sentence, path, chunks=None):
         import soundfile as sf
         import torch
         if self.model is None:
@@ -200,14 +202,14 @@ class VoxCPMEngine:
         v2 = self.style == "v2"
         pause, end = (V2_COMMA_PAUSE, V2_END_PAUSE) if v2 else (COMMA_PAUSE, END_PAUSE)
         parts = []
-        for i, chunk in enumerate(v2_chunks(sentence) if v2 else comma_chunks(sentence)):
+        for i, chunk in enumerate(chunks or (v2_chunks(sentence) if v2 else comma_chunks(sentence))):
             torch.manual_seed(VOXCPM_SEED)
             wav = self.model.generate(text=chunk, prompt_wav_path=str(VOXCPM_REF), prompt_text=self.ref_text,
                                       reference_wav_path=str(VOXCPM_REF), cfg_value=2.0, inference_timesteps=10)
             if i:
                 parts.append(np.zeros(int(sr * pause), dtype=np.float32))
             wav = np.asarray(wav, dtype=np.float32)
-            parts.append(trim_silence(wav, sr, level=0.01, margin=0.08, fade=0.02) if v2 else trim_silence(wav, sr))
+            parts.append(trim_silence(wav, sr, level=0.004, margin=0.06, fade=0.02, end_margin=0.2, end_fade=0.12) if v2 else trim_silence(wav, sr))
         parts.append(np.zeros(int(sr * end), dtype=np.float32))
         with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
             sf.write(tmp.name, np.concatenate(parts), sr)

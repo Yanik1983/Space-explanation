@@ -15,12 +15,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_audio as ga  # noqa: E402
 
 OUT = ga.ROOT / "audio-samples"
-SENTENCES = [
-    "קוראים לי נועם, ואני אהיה המדריך שלכם.",
-    "המסלולים הם לא עיגולים מושלמים, אלא אליפסות, כמו עיגול קצת מעוך.",
-    "כלומר, אם הייתם גרים שם, הייתם חוגגים יום הולדת כמעט ארבע פעמים בשנה!",
-    "שימו לב שהציר שלו קצת עקום, וזה בגלל זה שיש לנו עונות: קיץ, סתיו, חורף ואביב.",
-    "כולם נעים סביב השמש באותו כיוון, כמו מכוניות במסלול מרוצים, וכמעט באותו מישור, כאילו הם על שולחן ענק.",
+LONG = "כולם נעים סביב השמש באותו כיוון, כמו מכוניות במסלול מרוצים, וכמעט באותו מישור, כאילו הם על שולחן ענק."
+# (שם, משפט, חלוקה לחלקים; None = החלוקה הרגילה של v2)
+SAMPLES = [
+    ("4", "שימו לב שהציר שלו קצת עקום, וזה בגלל זה שיש לנו עונות: קיץ, סתיו, חורף ואביב.", None),
+    ("5a", LONG, None),
+    ("5b", LONG, [LONG]),
+    ("5c", LONG, ["כולם נעים סביב השמש באותו כיוון, כמו מכוניות במסלול מרוצים, וכמעט באותו מישור,",
+                  "כאילו הם על שולחן ענק."]),
 ]
 
 
@@ -29,14 +31,14 @@ async def main():
     old = json.loads((ga.AUDIO / "manifest.json").read_text(encoding="utf-8"))["files"]
     engine = ga.VoxCPMEngine(None, style="v2")
     rows = []
-    for n, s in enumerate(SENTENCES, 1):
-        print(f"[{n}/{len(SENTENCES)}] {s}")
-        shutil.copy(ga.AUDIO / old[s], OUT / f"{n}-old.mp3")
-        await engine.save(s, OUT / f"{n}-new.mp3")
+    for n, (name, s, chunks) in enumerate(SAMPLES, 1):
+        print(f"[{n}/{len(SAMPLES)}] {name}: {s}")
+        shutil.copy(ga.AUDIO / old[s], OUT / f"{name}-old.mp3")
+        await engine.save(s, OUT / f"{name}-new.mp3", chunks)
         rows.append(
-            f'<section><p>{s}</p>'
-            f'<label>עכשיו</label><audio controls preload="none" src="{n}-old.mp3"></audio>'
-            f'<label>חדש</label><audio controls preload="none" src="{n}-new.mp3"></audio></section>'
+            f'<section><p>{name}: {s}</p>'
+            f'<label>עכשיו</label><audio controls preload="none" src="{name}-old.mp3"></audio>'
+            f'<label>חדש</label><audio controls preload="none" src="{name}-new.mp3"></audio></section>'
         )
     (OUT / "index.html").write_text(
         '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
