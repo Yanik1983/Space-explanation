@@ -7,9 +7,10 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { LANG, LOCALE, tt } from './i18n.js';
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY, GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION, MOONS, COMETS, COMETS_INFO } from './content.js';
 import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
-import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto, skyTexture } from './textures.js';
+import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './kid-presenter.js';
+import { GAL_R, GAL_SUN_R, buildGalaxy, seeded } from './galaxy.js';
 
 const $ = (id) => document.getElementById(id);
 const DEG = Math.PI / 180;
@@ -62,12 +63,8 @@ controls.dampingFactor = 0.08;
 controls.enablePan = false;
 controls.maxDistance = 8000;
 
-// הרקע: צילום אמיתי של שביל החלב
-scene.background = skyTexture();
-scene.backgroundIntensity = 1;
-// מסובבים את הצילום כך ששביל החלב נמצא בכיוון האמיתי שלו: מרכז הגלקסיה לכיוון קשת (מזל קשת),
-// והפס נוטה בכ־60 מעלות למישור של כוכבי הלכת. (הזוויות חושבו מתוך הצילום עצמו – איפה הפס והליבה הבהירה.)
-scene.backgroundRotation.set(1.4949, -0.6142, -0.4879);
+// הרקע: שביל החלב שבנינו (כדור השמיים, ראו "שביל החלב מבחוץ"), כך שכל האתר הוא עולם אחד
+scene.background = null;
 
 // זוהר סביב דברים בהירים (השמש) – "bloom". במכשירים חלשים, או אם האתר מתחיל לגמגם, הוא נכבה לבד.
 // ?fx=high / ?fx=low בכתובת מכריחים מצב מסוים (לבדיקות).
@@ -621,8 +618,6 @@ initGalaxyMotion();
 // הגלקסיה בנויה בקוד מכוכבים (ראו בהמשך) ומכוונת כמו הגלקסיה האמיתית: המרכז שלה בכיוון
 // מזל קשת, והמישור שלה נוטה בכ־60 מעלות למישור של כוכבי הלכת. השמש (נקודת האפס) יושבת על אחת הזרועות,
 // בערך באמצע הדרך בין המרכז לקצה. הגדלים כאן לא בקנה מידה – מערכת השמש האמיתית קטנה מפיקסל בציור הזה.
-const GAL_R = 9000;
-const GAL_SUN_R = 0.52 * GAL_R;
 const GAL_POLE = poleVector([192.859, 27.128]); // הקוטב הצפוני של הגלקסיה
 const GAL_CENTRE_DIR = poleVector([266.405, -28.936]); // מרכז הגלקסיה (קשת A*)
 // המצלמה מכוונת לנקודה שבין מרכז הגלקסיה לשמש, כדי שגם המרכז וגם "אנחנו כאן" ייראו
@@ -637,11 +632,7 @@ const milky = (() => {
   g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(toSun, GAL_POLE, new THREE.Vector3().crossVectors(toSun, GAL_POLE)));
   scene.add(g);
 
-  // הגלקסיה בנויה כולה בקוד, לפי המפות שהמדענים משרטטים מבפנים: מוט במרכז, שתי זרועות גדולות (פרסאוס
-  // ומגן־קנטאורוס), שתיים קטנות יותר (קשת ומרובע), ושלוחת אוריון הקטנה שעליה יושבת השמש – בין זרוע קשת
-  // לזרוע פרסאוס. כל הגלקסיה נמצאת בתוך holder: ציר y הוא הקוטב הצפוני שלה והשמש נמצאת על ציר z.
-  // זווית חיובית סביב y היא נגד כיוון השעון במבט מהקוטב הצפוני (כמו קו האורך הגלקטי), והגלקסיה מסתובבת
-  // עם כיוון השעון – ולכן הזרועות נגררות: ככל שמתרחקים מהמרכז הן מתעקלות נגד כיוון השעון.
+  // הגלקסיה בנויה בקוד (js/galaxy.js) ונמצאת בתוך holder: ציר y הוא הקוטב הצפוני שלה והשמש נמצאת על ציר z.
   const R0 = GAL_SUN_R;
   const side = GAL_R * 2.2;
   // שכבת זוהר רכה מתחת לכוכבים (מצוירת על קנבס מאותן נקודות), כדי שהזרועות ייראו רציפות
@@ -724,112 +715,6 @@ const milky = (() => {
     holder.add(o);
   }
 
-  // ---- בניית הגלקסיה ----
-  const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
-  const PITCH = Math.tan(12.5 * DEG); // זווית הסלסול של הזרועות, כמו במציאות (12–13 מעלות)
-  const BAR_ANGLE = 27 * DEG; // המוט נוטה ב־27 מעלות לקו שבין השמש למרכז; הקצה הקרוב אלינו בצד של רביע הקשת
-  const BAR_LEN = 0.6 * R0;
-  // הזרועות: הרדיוס של כל זרועה בכיוון של השמש (זווית 0), ביחס למרחק השמש מהמרכז
-  const ARMS = [
-    { r0: 1.22, w: 1.0, wide: 1.0, start: 0.62 }, // פרסאוס – זרוע גדולה, מחוץ לשמש
-    { r0: 0.874, w: 0.32, wide: 0.6, start: 0.75 }, // קשת – זרוע קטנה, בין השמש למרכז
-    { r0: 0.626, w: 1.0, wide: 1.0, start: 0.62 }, // מגן־קנטאורוס – זרוע גדולה
-    { r0: 0.449, w: 0.32, wide: 0.6, start: 0.75 }, // מרובע (והזרוע החיצונית בהמשכה)
-  ];
-  const angleAt = (arm, r) => Math.log(r / (arm.r0 * R0)) / PITCH; // הזווית שבה הזרוע מגיעה לרדיוס r
-  const C = (hex) => new THREE.Color(hex);
-  const COL = { bulge: C('#ffd29a'), bar: C('#ffdcaa'), disc: C('#f2e4cc'), arm: C('#a8c0ff'), young: C('#d6e4ff'), hii: C('#ff6f9e'), dust: C('#140c08') };
-
-  function buildGalaxy() {
-    const phone = window.innerWidth <= 720;
-    const N = phone ? 26000 : 60000;
-    const ND = phone ? 3500 : 8000;
-    const stars = { pos: [], col: [], size: [], phase: [], flare: [] };
-    const dust = { pos: [], col: [], size: [], phase: [], flare: [] };
-    const tmp = new THREE.Color();
-    const put = (bag, x, y, z, c, size, k = 1) => {
-      bag.pos.push(x, y, z);
-      bag.col.push(c.r * k, c.g * k, c.b * k);
-      bag.size.push(size);
-      bag.phase.push(Math.random());
-      bag.flare.push(bag === stars && Math.random() < 0.006 ? 1 : 0);
-    };
-    // נקודה על זרוע: מרחק r וזווית לפי הספירלה, עם פיזור לרוחב הזרוע (שגדל כלפי חוץ)
-    const onArm = (arm, r, across) => {
-      const th = angleAt(arm, r);
-      const w = (0.022 + 0.03 * r / R0) * R0 * arm.wide * across;
-      const rr = r + w;
-      return [Math.sin(th) * rr, Math.cos(th) * rr];
-    };
-    for (let n = 0; n < N; n++) {
-      const kind = Math.random();
-      if (kind < 0.1) {
-        // הבליטה: "ביצה" תפוחה של כוכבים זקנים וצהבהבים, בעובי של בערך 10,000 שנות אור
-        const r = Math.abs(gauss()) * 0.22 * R0;
-        const u = Math.random() * 2 - 1, phi = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
-        put(stars, s * Math.cos(phi) * r, u * r * 0.8, s * Math.sin(phi) * r, tmp.copy(COL.bulge), 30 + Math.random() * 40, 0.75 + Math.random() * 0.4);
-      } else if (kind < 0.2) {
-        // המוט
-        const t = (Math.random() * 2 - 1) * BAR_LEN * (0.35 + 0.65 * Math.random()), wdt = gauss() * 0.11 * BAR_LEN;
-        const x = -Math.sin(BAR_ANGLE) * t + Math.cos(BAR_ANGLE) * wdt;
-        const z = Math.cos(BAR_ANGLE) * t + Math.sin(BAR_ANGLE) * wdt;
-        put(stars, x, gauss() * 0.06 * R0, z, tmp.copy(COL.bar), 30 + Math.random() * 40, 0.85 + Math.random() * 0.4);
-      } else if (kind < 0.34) {
-        // הדיסק: כוכבים בין הזרועות, דלילים יותר ככל שמתרחקים
-        const r = Math.min(GAL_R, -Math.log(1 - Math.random() * 0.97) * 0.42 * R0 + 0.15 * R0);
-        const th = Math.random() * Math.PI * 2;
-        const thick = (0.026 + 0.06 * Math.exp(-r / (0.35 * R0))) * R0;
-        put(stars, Math.sin(th) * r, gauss() * thick, Math.cos(th) * r, tmp.copy(COL.disc).lerp(COL.arm, Math.min(1, r / GAL_R) * 0.5), 18 + Math.random() * 22, 0.25 + Math.random() * 0.3);
-      } else if (kind < 0.42) {
-        // "הדיסק העבה": כוכבים זקנים ודלילים מעל ומתחת לדיסק, שיוצרים סביבו זוהר רך שמתעבה לכיוון המרכז
-        const r = Math.min(GAL_R, -Math.log(1 - Math.random() * 0.97) * 0.38 * R0 + 0.1 * R0);
-        const th = Math.random() * Math.PI * 2;
-        const thick = (0.07 + 0.09 * Math.exp(-r / (0.4 * R0))) * R0;
-        put(stars, Math.sin(th) * r, gauss() * thick, Math.cos(th) * r, tmp.copy(COL.disc).lerp(COL.bulge, 0.4), 16 + Math.random() * 18, 0.35 + Math.random() * 0.3);
-      } else {
-        // הזרועות: הגדולות מקבלות יותר כוכבים; כוכבים צעירים כחולים, וכאן ושם ענני גז ורודים שבהם נולדים כוכבים
-        let arm;
-        do arm = ARMS[(Math.random() * ARMS.length) | 0]; while (Math.random() > arm.w);
-        const r = arm.start * R0 * 0.6 + Math.pow(Math.random(), 0.85) * (GAL_R - arm.start * R0 * 0.6);
-        const [x, z] = onArm(arm, r, gauss());
-        const outer = r / GAL_R;
-        const y = gauss() * (0.018 + 0.022 * (1 - outer)) * R0;
-        const fade = Math.min(1, (GAL_R - r) / (0.25 * GAL_R)) * Math.min(1, r / (0.55 * R0));
-        if (arm.w === 1 && Math.random() < 0.004) {
-          // ענן ורוד שבו נולדים כוכבים: קבוצה קטנה וצפופה של נקודות
-          for (let k = 0; k < 9; k++) put(stars, x + gauss() * 0.012 * R0, y, z + gauss() * 0.012 * R0, tmp.copy(COL.hii), 50 + Math.random() * 60, 0.8 * fade);
-        } else if (Math.random() < 0.12) put(stars, x, y, z, tmp.copy(COL.young), 40 + Math.random() * 40, 1.0 * fade);
-        else put(stars, x, y, z, tmp.copy(COL.disc).lerp(COL.arm, 0.35 + 0.5 * outer), 22 + Math.random() * 34, (0.55 + Math.random() * 0.45) * fade);
-      }
-    }
-    // שלוחת אוריון: קטע קצר ודליל של זרוע, שעובר דרך השמש
-    for (let n = 0; n < N * 0.03; n++) {
-      const a = (Math.random() - 0.5) * 70 * DEG;
-      const r = R0 * Math.exp(a * Math.tan(20 * DEG)) + gauss() * 0.03 * R0;
-      put(stars, Math.sin(a) * r, gauss() * 0.02 * R0, Math.cos(a) * r, tmp.copy(COL.disc).lerp(COL.arm, 0.6), 22 + Math.random() * 30, 0.7);
-    }
-    // אבק כהה בצד הפנימי של הזרועות (כמו בצילומים של גלקסיות ספירליות)
-    for (let n = 0; n < ND; n++) {
-      let arm;
-      do arm = ARMS[(Math.random() * ARMS.length) | 0]; while (Math.random() > arm.w);
-      const r = arm.start * R0 + Math.random() * (0.9 * GAL_R - arm.start * R0);
-      const [x, z] = onArm(arm, r, -1.1 + gauss() * 0.35);
-      put(dust, x, gauss() * 0.006 * R0, z, COL.dust, 140 + Math.random() * 160);
-    }
-    // הזוהר: כל כוכב ארבעים הופך לכתם גדול וחלש באותו מקום (ובאותו עובי)
-    const glow = { pos: [], col: [], size: [], phase: [], flare: [] };
-    for (let i = 0; i < stars.size.length; i += 40) {
-      // כתם בודד רחוק מהדיסק נראה כמו ענן מוזר – מדלגים עליו
-      if (Math.abs(stars.pos[i * 3 + 1]) > 0.06 * R0) continue;
-      glow.pos.push(stars.pos[i * 3], stars.pos[i * 3 + 1] * 1.6, stars.pos[i * 3 + 2]);
-      for (let c = 0; c < 3; c++) glow.col.push(stars.col[i * 3 + c] * 0.006);
-      glow.size.push(900 + Math.random() * 600);
-      glow.phase.push(0);
-      glow.flare.push(0);
-    }
-    return { stars, dust, glow };
-  }
-
   const setGeo = (points, bag) => {
     const geo = points.geometry;
     geo.setAttribute('position', new THREE.Float32BufferAttribute(bag.pos, 3));
@@ -869,90 +754,30 @@ const milky = (() => {
     return tex;
   }
 
-  // השמיים מבפנים (בתחנה "טסים בחלל"): אותה גלקסיה בדיוק, כפי שהיא נראית מהמקום של השמש.
-  // כל כוכב מצויר על כדור ענק סביבנו, בכיוון שבו הוא נמצא – וכך הזרועות, המרכז והאבק הופכים לפס של שביל החלב.
+  // השמיים: אותה גלקסיה בדיוק, כפי שהיא נראית מהמקום של השמש – תמונה שמצוירת מראש מאותו מודל
+  // (tools/paint-sky.mjs), עם מיליוני כוכבים ועננים של אבק. הכדור נע עם המצלמה, ולכן השמיים תמיד "באינסוף".
+  const skyMap = imageTexture('textures/sky/galaxy.jpg');
   const skyDome = new THREE.Mesh(
-    new THREE.SphereGeometry(40000, 64, 32),
-    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }),
+    new THREE.SphereGeometry(40000, 96, 48),
+    new THREE.MeshBasicMaterial({ map: skyMap, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }),
   );
   // הכדור מסובב כמו holder במנוחה, כך שהפס נמצא בכיוון האמיתי שלו בשמיים
   skyDome.quaternion.copy(g.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(UP, Math.PI / 2));
-  skyDome.visible = false;
   skyDome.renderOrder = -1;
   skyDome.frustumCulled = false;
   scene.add(skyDome);
 
-  // הציור נעשה ישירות על מערך של מספרים ולא עם הצבעים המדורגים של הקנבס: הדפדפן מוסיף להם "רעש" זעיר,
-  // ואחרי אלפי כתמים הרעש מצטבר לרשת שנראית בבירור
-  function paintSky({ stars, dust }) {
-    const W = 1024, H = W / 2;
-    const buf = new Float32Array(W * H * 3);
-    const shade = new Float32Array(W * H).fill(1);
-    // כתם רך: (1 - מרחק²)², כולל מעבר בין קצה שמאל לקצה ימין של המפה
-    const splat = (px, py, rad, fn) => {
-      const r2 = rad * rad;
-      for (let y = Math.max(0, Math.floor(py - rad)); y <= Math.min(H - 1, Math.ceil(py + rad)); y++) {
-        for (let xx = Math.floor(px - rad); xx <= Math.ceil(px + rad); xx++) {
-          const q = ((xx - px) ** 2 + (y - py) ** 2) / r2;
-          if (q >= 1) continue;
-          fn(y * W + ((xx % W) + W) % W, (1 - q) * (1 - q));
-        }
-      }
-    };
-    // הדיסק בקוד עדיין דק יחסית (כדי שמבחוץ הזרועות ייראו חדות), ולכן כאן מעבים אותו קצת – כמו שהפס נראה בשמיים האמיתיים.
-    // כיוון (מהשמש) → נקודה במפה, באותה צורה שבה SphereGeometry פורש את התמונה על הכדור
-    const each = (bag, step, thick, near, maxRad, draw) => {
-      for (let i = 0; i < bag.size.length; i += step) {
-        const x = bag.pos[i * 3], y = bag.pos[i * 3 + 1] * thick, z = bag.pos[i * 3 + 2] - R0;
-        const d = Math.hypot(x, y, z);
-        if (d < near) continue;
-        const u = ((Math.atan2(z, -x) / (2 * Math.PI)) % 1 + 1) % 1;
-        // כוכבים קרובים נראים גדולים יותר
-        draw(i, u * W, (Math.acos(y / d) / Math.PI) * H, Math.min(maxRad, Math.max(3, (2 * R0) / d)));
-      }
-    };
-    // בטלפון יש פחות כוכבים, ולכן כל אחד מצויר קצת יותר בהיר. ליד המרכז הכוכבים צפופים מאוד – מחלישים אותם קצת
-    const bright = 60000 / stars.size.length;
-    const starSplat = (a) => (i, px, py, rad) => {
-      const k = a * bright * (Math.hypot(stars.pos[i * 3], stars.pos[i * 3 + 2]) < 0.35 * R0 ? 0.45 : 1);
-      const r = stars.col[i * 3] * k, g = stars.col[i * 3 + 1] * k, b = stars.col[i * 3 + 2] * k;
-      splat(px, py, rad, (p, f) => { buf[p * 3] += r * f; buf[p * 3 + 1] += g * f; buf[p * 3 + 2] += b * f; });
-    };
-    each(stars, 1, 1.5, 1, 8, starSplat(0.09));
-    // ועוד שכבת זוהר רכה ורחבה, כדי שהפס ייראה כמו ענן ולא רק כמו נקודות
-    each(stars, 4, 1.5, 1, 8, (i, px, py, rad) => starSplat(0.016)(i, px, py, rad * 4));
-    // האבק הכהה יוצר את "הסדק" שרואים באמצע הפס
-    each(dust, 1, 5, 0.25 * R0, 6, (i, px, py, rad) => splat(px, py, rad * 1.3, (p, f) => { shade[p] *= 1 - 0.12 * f; }));
-    // מספרים → צבעים, בלי "שריפה" של האזורים הבהירים
-    const cv = document.createElement('canvas');
-    cv.width = W;
-    cv.height = H;
-    const ctx = cv.getContext('2d');
-    const img = ctx.createImageData(W, H);
-    for (let p = 0; p < W * H; p++) {
-      for (let c = 0; c < 3; c++) img.data[p * 4 + c] = 255 * (1 - Math.exp(-buf[p * 3 + c] * Math.max(0.3, shade[p])));
-      img.data[p * 4 + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }
-
   // הגלקסיה נבנית רק כשמגיעים לאחת התחנות שלה בפעם הראשונה
   const load = () => {
     if (disk.material.map) return;
-    const gal = buildGalaxy();
+    const phone = window.innerWidth <= 720;
+    const gal = buildGalaxy({ n: phone ? 26000 : 60000, nd: phone ? 3500 : 8000, random: seeded(7) });
     setGeo(starPoints, gal.stars);
     setGeo(glowPoints, gal.glow);
     setGeo(dustPoints, gal.dust);
     // שורה 0 בקנבס היא הקצה העליון של המשטח, שאחרי הסיבוב שלו נמצא ב־z שלילי של holder – בדיוק כמו ב־toPx
     disk.material.map = paintHaze(gal);
     disk.material.needsUpdate = true;
-    skyDome.material.map = paintSky(gal);
-    skyDome.material.map.generateMipmaps = false;
-    skyDome.material.map.minFilter = THREE.LinearFilter;
-    skyDome.material.needsUpdate = true;
   };
   return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
 })();
@@ -972,8 +797,10 @@ function updateMilkyWay(dt) {
   if (milkyTarget || motionTarget || bhTarget) milky.load();
   // בתחנות "טסים בחלל" ו"חור שחור" שביל החלב שברקע הוא הגלקסיה מהקוד, כפי שהיא נראית מבפנים (במקום הצילום)
   const inside = Math.max(motionMix, bhMix) * (1 - milkyMix);
-  milky.skyDome.visible = inside > 0.001;
-  milky.skyDome.material.opacity = inside * 0.55;
+  // השמיים נעלמים רק כשיוצאים מהגלקסיה (אז רואים אותה מבחוץ)
+  milky.skyDome.visible = milkyMix < 0.999;
+  milky.skyDome.material.opacity = 1 - milkyMix;
+  milky.skyDome.position.copy(camera.position);
   const on = milkyMix > 0.001;
   for (const o of [milky.disk, milky.core, milky.here, milky.starPoints, milky.dustPoints, milky.glowPoints]) o.visible = on;
   if (!on && inside > 0.001) {
@@ -990,8 +817,6 @@ function updateMilkyWay(dt) {
   }
   // מבחוץ מערכת השמש קטנה מנקודה – מסתירים את הגופים עצמם (הסימון "אנחנו כאן" מראה איפה היא)
   for (const b of bodies) b.group.visible = milkyMix < 0.5;
-  // מחוץ לגלקסיה אין כוכבים קרובים מסביב – הרקע שחור לגמרי
-  scene.backgroundIntensity = (1 - milkyMix) * (1 - Math.max(motionMix, bhMix));
   starField.material.opacity = 1 - milkyMix;
   controls.maxDistance = on || followBody === milkyInfo ? 60000 : 8000;
   if (!on) {
