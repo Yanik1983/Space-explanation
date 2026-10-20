@@ -95,9 +95,9 @@ def trim_silence(wav, sr, level=0.02, margin=0.03, fade=0.0, end_margin=None, en
     return wav
 
 
-# ---- סגנון v2 (בבדיקה, tools/narration_samples.py): משפט שלם בהקלטה אחת, כדי שהטון בפסיקים יהיה טבעי.
+# ---- סגנון v2 (נבחר אחרי השוואה, tools/narration_samples.py): משפט שלם בהקלטה אחת, כדי שהטון בפסיקים יהיה טבעי.
 # רק משפט ארוך מ־V2_LONG תווים נחתך, בפסיק הקרוב ביותר לאמצע, עם הפסקה קצרה.
-V2_LONG = 80
+V2_LONG = 140
 V2_COMMA_PAUSE = 0.06
 V2_END_PAUSE = 0.25
 
@@ -180,7 +180,7 @@ class PhonikudEngine:
 class VoxCPMEngine:
     name = "voxcpm"
 
-    def __init__(self, args, style="v1"):
+    def __init__(self, args, style="v2"):
         meta = json.loads(VOXCPM_REF.with_suffix(".json").read_text(encoding="utf-8"))
         self.ref_text = meta["text"]
         self.style = style
