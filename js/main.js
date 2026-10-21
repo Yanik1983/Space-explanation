@@ -2340,7 +2340,8 @@ $('settings-test').addEventListener('click', () => {
 });
 
 // ---------- הגדרות למפתחים ----------
-// מוסתרות מהילדים: מופיעות אחרי חמש לחיצות מהירות על הכותרת "הגדרות" (או עם ‎?dev=1‎ בכתובת), ונשמרות בדפדפן הזה
+// מוסתרות מהילדים: מופיעות אחרי חמש לחיצות מהירות על הכותרת "הגדרות" (או עם ‎?dev=1‎ בכתובת), עד שהדף נטען מחדש.
+// כמות הכוכבים שנבחרה כן נשמרת בדפדפן הזה
 const devBox = document.createElement('div');
 devBox.className = 'dev-settings';
 devBox.innerHTML = `<h3>${tt('🛠️ למפתחים', '🛠️ Developers')}</h3>
@@ -2362,17 +2363,13 @@ starsSel.addEventListener('change', () => {
   milky.setStarCount(n === milky.defaultStars() ? 0 : n);
   fillStars();
 });
+// לא נשמר: אחרי טעינה מחדש האזור שוב מוסתר (מנקים גם הגדרה ישנה שנשמרה בגרסה קודמת)
 function setDevMode(on) {
-  try {
-    if (on) localStorage.setItem('devMode', '1');
-    else localStorage.removeItem('devMode');
-  } catch {}
   devBox.hidden = !on;
   if (on) fillStars();
 }
-let devOn = new URLSearchParams(location.search).has('dev');
-try { devOn ||= localStorage.getItem('devMode') === '1'; } catch {}
-setDevMode(devOn);
+try { localStorage.removeItem('devMode'); } catch {}
+setDevMode(new URLSearchParams(location.search).has('dev'));
 $('dev-off').addEventListener('click', () => setDevMode(false));
 let devTaps = [];
 settingsEl.querySelector('h2').addEventListener('click', () => {

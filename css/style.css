@@ -409,7 +409,6 @@ body.term-open #panel { visibility: hidden; }
   .btn-icon { min-width: 36px; padding: 6px 8px; }
 }
 .settings-guide { display: block; margin-top: 12px; }
-.settings-lang { display: block; margin-top: 10px; font-size: 13px; color: var(--accent); }
 
 /* בחלונות ההסבר מותר רק לגלול למעלה ולמטה, בלי צביטה שמגדילה את כל הדף */
 .panel, .settings, .intro { touch-action: pan-y; }
@@ -475,3 +474,4 @@ body.leaving { opacity: 0; transition: opacity 0.35s ease-in; }
 .dev-settings select { width: 100%; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); color: inherit; border: 1px solid rgba(255, 255, 255, 0.2); font: inherit; }
 .dev-settings select option { color: #000; }
 .dev-note { font-size: 12px; opacity: 0.75; margin: 4px 0 10px; }
+.dev-settings[hidden] { display: none; }
