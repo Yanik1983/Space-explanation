@@ -937,7 +937,7 @@ const milky = (() => {
   photo.add(photoPoints);
   // כמה נקודות: בטלפון 200 אלף ובמחשב 600 אלף. מפתחים יכולים לשנות בהגדרות (נשמר בדפדפן הזה בלבד)
   const PHOTO_N0 = 220000; // הכמות שלפיה כוונו הבהירות והגודל של כל נקודה
-  let photoPx = null, photoBuild = 0;
+  let photoPx = null, photoBuild = 0, warmup = 0;
   const defaultStars = () => (window.innerWidth <= 720 || touchDevice ? 200000 : 600000);
   const starCount = () => {
     try {
@@ -982,6 +982,7 @@ const milky = (() => {
       photoPoints.geometry.dispose();
       photoPoints.geometry = new THREE.BufferGeometry();
       setGeo(photoPoints, bag);
+      warmup = 2; // מציירים את הגלקסיה פעמיים בשקיפות מלאה, כדי שהיא תעלה לכרטיס הגרפי עכשיו ולא באמצע הטיסה
     };
     step();
   }
@@ -1007,7 +1008,8 @@ const milky = (() => {
       img.src = 'textures/sky/m101-1k.jpg';
       photoPoints.geometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
     }
-    if (disk.material.map) return;
+    // הגלקסיה הקודמת מהקוד (גיבוי) נבנית רק כשמשתמשים בה – היא כבדה, ובנייה שלה באמצע טיסה גורמת לקרטוע
+    if (GALAXY_PHOTO || disk.material.map) return;
     const phone = window.innerWidth <= 720;
     const gal = buildGalaxy({ n: phone ? 26000 : 60000, nd: phone ? 3500 : 8000, random: seeded(7) });
     setGeo(starPoints, gal.stars);
@@ -1017,7 +1019,7 @@ const milky = (() => {
     disk.material.map = paintHaze(gal);
     disk.material.needsUpdate = true;
   };
-  return { disk, core, photo, photoU, photoPlane, photoMat, starCount, defaultStars, setStarCount, bulge, bulgeU, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
+  return { disk, core, photo, photoU, photoPlane, photoMat, warm: () => warmup > 0 && warmup--, starCount, defaultStars, setStarCount, bulge, bulgeU, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -1046,6 +1048,13 @@ function updateMilkyWay(dt) {
   for (const o of [milky.disk, milky.core, milky.here, milky.starPoints, milky.dustPoints, milky.glowPoints]) o.visible = on;
   milky.photo.visible = on && GALAXY_PHOTO;
   milky.photoPlane.visible = milky.bulge.visible = true;
+  if (!on && GALAXY_PHOTO && milky.warm()) {
+    // חימום: הגלקסיה מצוירת בשקיפות מלאה (לא רואים כלום), רק כדי שהכוכבים והתמונה יעלו לכרטיס הגרפי מראש
+    milky.photo.visible = true;
+    milky.photoU.uOpacity.value = 0;
+    milky.photoPlane.material.opacity = 0;
+    milky.photoMat.uniforms.uOpacity.value = 0;
+  }
   if (GALAXY_PHOTO) milky.disk.visible = milky.core.visible = milky.dustPoints.visible = milky.glowPoints.visible = milky.starPoints.visible = false;
   if (!on && inside > 0.001 && GALAXY_PHOTO) {
     // מבפנים רואים את הכוכבים של אותה גלקסיה (מהתמונה), סביב השמש; התמונה השטוחה והבליטה רחוקות ומצוירות כבר בשמיים
@@ -2653,6 +2662,8 @@ $('tour-stop').addEventListener('click', () => {
 // ---------- מסך פתיחה ----------
 function closeIntro() {
   $('intro').hidden = true;
+  // בונים את הכוכבים של שביל החלב מראש, ברגע שקט אחרי הפתיחה – כדי שזום אאוט או טיסה לגלקסיה לא יקרטעו
+  setTimeout(() => (window.requestIdleCallback || setTimeout)(() => milky.load()), 1500);
 }
 // ---------- המסך נשאר דולק ----------
 // בטלפון המסך נכבה אחרי כמה שניות בלי מגע. כל עוד האתר פתוח וגלוי, מבקשים מהמכשיר להשאיר את המסך דולק
