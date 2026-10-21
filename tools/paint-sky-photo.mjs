@@ -1,6 +1,7 @@
 // מצייר מראש את השמיים כפי שהם נראים מהשמש, מתוך הגלקסיה שבנויה מתמונת האבל (js/photo-galaxy.js) – אותה גלקסיה
 // שרואים מבחוץ באתר, כך שבפנים ובחוץ זה עולם אחד:
 //   node tools/paint-sky-photo.mjs && python3 tools/save-sky.py galaxy-photo
+//   node tools/paint-sky-photo.mjs --haze-only && python3 tools/save-sky.py galaxy-photo-haze   (מה שהאתר משתמש בו)
 // התוצאה: textures/sky/galaxy-photo.jpg (4096×2048) ו־galaxy-photo-2k.jpg. השיטה כמו ב־tools/paint-sky.mjs
 // (זוהר רך, מיליוני כוכבים זעירים ואבק כהה), רק שהכוכבים באים מהתמונה.
 import fs from 'fs';
@@ -12,6 +13,10 @@ import { GAL_SUN_R, PHOTO_W, PHOTO_ROT, diskStar, bulgeStar, BULGE_SHARE } from 
 const R0 = GAL_SUN_R;
 const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
 const W = 4096, H = 2048;
+// --haze-only: רק הזוהר של הפס והאבק, בלי הכוכבים הקטנים. באתר הכוכבים מצוירים בנפרד כנקודות חדות (שלא נמרחות
+// כשהתמונה נמתחת על כל השמיים), והתמונה הזאת נותנת רק את הזוהר הרך: textures/sky/galaxy-photo-haze.jpg
+const HAZE_ONLY = process.argv.includes('--haze-only');
+const NAME = HAZE_ONLY ? 'galaxy-photo-haze' : 'galaxy-photo';
 const THICK = 1.5; // הפס בשמיים קצת עבה יותר מהדיסק, כמו שהוא נראה באמת
 
 // הפיקסלים של התמונה, מוקטנת ל־512×512 כמו באתר (RGBA)
@@ -136,7 +141,8 @@ for (let y = 0; y < H; y++) {
   }
 }
 
-// ---- 2. מיליוני כוכבים זעירים ----
+// ---- 2. מיליוני כוכבים זעירים (לא בגרסת "זוהר בלבד": שם הכוכבים מצוירים באתר עצמו כנקודות חדות) ----
+if (!HAZE_ONLY) {
 console.time('stars');
 // כל כוכב מתחלק בין ארבעת הפיקסלים הקרובים (כך שגם כוכב "בין פיקסלים" נראה חד ולא מרובע)
 const dot = (px, py, r, g, b) => {
@@ -169,6 +175,7 @@ for (let i = 0; i < 1200000; i++) {
   dot(u * W, (Math.acos(cz) / Math.PI) * H, col[0] * lum, col[1] * lum, col[2] * lum);
 }
 console.timeEnd('stars');
+}
 
 // ---- 3. האבק הכהה ----
 console.time('dust');
@@ -213,6 +220,6 @@ for (let p = 0; p < W * H; p++) {
   // החזקה 0.8 מעלה מעט את האזורים החלשים בפס, בלי לשרוף את המרכז
   for (let c = 0; c < 3; c++) out[p * 3 + c] = Math.round(255 * (1 - Math.exp(-((buf[p * 3 + c] * s) ** 0.8))));
 }
-const raw = path.join(root, 'textures/sky/galaxy-photo.raw');
+const raw = path.join(root, `textures/sky/${NAME}.raw`);
 fs.writeFileSync(raw, out);
 console.log('wrote', raw, W, H);

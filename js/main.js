@@ -916,8 +916,11 @@ const milky = (() => {
   // השמיים: אותה גלקסיה בדיוק, כפי שהיא נראית מהמקום של השמש – תמונה שמצוירת מראש מאותו מודל
   // (tools/paint-sky.mjs), עם מיליוני כוכבים ועננים של אבק. הכדור נע עם המצלמה, ולכן השמיים תמיד "באינסוף".
   // עם הגלקסיה מהתמונה – השמיים מצוירים ממנה (tools/paint-sky-photo.mjs), כך שבפנים ובחוץ זו אותה גלקסיה
-  const skyName = GALAXY_PHOTO ? 'galaxy-photo' : 'galaxy';
-  const skyMap = imageTexture(`textures/sky/${skyName}.jpg`); // גם בטלפון ברזולוציה המלאה (4096×2048), כדי שהשמיים יהיו חדים יותר
+  // עם הגלקסיה מהתמונה, התמונה היא רק הזוהר הרך של הפס והאבק (רך ממילא, ולכן בטלפון מספיקה הגרסה הקטנה);
+  // הכוכבים מצוירים בנפרד כנקודות חדות (skyStars, למטה), כדי שלא יימרחו כשהתמונה נמתחת על כל השמיים
+  const skyMap = GALAXY_PHOTO
+    ? imageTexture(window.innerWidth <= 720 || touchDevice ? 'textures/sky/galaxy-photo-haze-2k.jpg' : 'textures/sky/galaxy-photo-haze.jpg')
+    : imageTexture(window.innerWidth <= 720 ? 'textures/sky/galaxy-2k.jpg' : 'textures/sky/galaxy.jpg');
   const skyDome = new THREE.Mesh(
     new THREE.SphereGeometry(40000, 96, 48),
     new THREE.MeshBasicMaterial({ map: skyMap, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }),
@@ -927,6 +930,93 @@ const milky = (() => {
   skyDome.renderOrder = -1;
   skyDome.frustumCulled = false;
   scene.add(skyDome);
+  // בלי הכוכבים, הזוהר בתמונה מכויל לבהירות מלאה – מחלישים אותו, כדי שהפס יהיה עדין והכוכבים החדים יבלטו
+  if (GALAXY_PHOTO) skyDome.material.color.setScalar(0.5);
+
+  // הכוכבים בשמיים: נקודות חדות בגודל פיקסל או שניים (בכל זום ובכל מסך), באותו כיוון כמו הפס.
+  // הפס עצמו: כוכבים מאותה גלקסיה (photo-galaxy.js) כפי שהם נראים מהשמש – הבהירים ביותר מבין הרבה מועמדים,
+  // עם אותו אבק שמחשיך אותם ליד המישור כמו בציור של הזוהר. ובנוסף כוכבים קרובים מכל הכיוונים
+  const skyStarsMat = new THREE.ShaderMaterial({
+    uniforms: { uOpacity: { value: 1 }, uPR: { value: renderer.getPixelRatio() } },
+    vertexShader: `${LOGDEPTH_V[0]}
+      attribute float size; varying vec3 vColor;
+      uniform float uPR;
+      void main() {
+        vColor = color;
+        gl_PointSize = size * uPR;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        ${LOGDEPTH_V[1]}
+      }`,
+    fragmentShader: `${LOGDEPTH_F[0]}
+      uniform float uOpacity; varying vec3 vColor;
+      void main() {
+        ${LOGDEPTH_F[1]}
+        float a = smoothstep(0.5, 0.12, length(gl_PointCoord - 0.5));
+        gl_FragColor = vec4(vColor * a * uOpacity, 1.0);
+        #include <colorspace_fragment>
+      }`,
+    vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const skyStars = new THREE.Points(new THREE.BufferGeometry(), skyStarsMat);
+  skyStars.frustumCulled = false;
+  skyStars.renderOrder = -1;
+  skyDome.add(skyStars);
+  function buildSkyStars(px) {
+    const phone = window.innerWidth <= 720 || touchDevice;
+    const NB = phone ? 30000 : 60000, NL = phone ? 7000 : 12000, R = 35000;
+    const random = seeded(31);
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
+    const cr = Math.cos(PHOTO_ROT), sr = Math.sin(PHOTO_ROT), R0 = GAL_SUN_R;
+    const DUST_H = 0.03 * R0, KAPPA = 1 / (0.3 * R0);
+    // מועמדים מהגלקסיה: כיוון מהשמש ובהירות (כוכב רחוק חלש יותר, והאבק בדרך מחליש עוד)
+    const cand = [];
+    while (cand.length < NB * 5) {
+      const st = random() < 0.1 ? bulgeStar(random, gauss) : diskStar(px, random, gauss);
+      if (!st) continue;
+      const x = st.x * cr + st.z * sr, y = st.y * 1.5, z = -st.x * sr + st.z * cr - R0;
+      const d = Math.hypot(x, y, z);
+      if (d < 0.01 * R0) continue;
+      const ext = Math.exp(-KAPPA * d * (DUST_H / Math.hypot(st.y, DUST_H)));
+      const lum = 0.2 + 4 * random() ** 10;
+      const n = Math.max(1e-6, Math.max(st.r, st.g, st.b));
+      cand.push({ x: x / d, y: y / d, z: z / d, f: (lum * ext) / (d * d), r: st.r / n, g: st.g / n, b: st.b / n });
+    }
+    cand.sort((a, b) => b.f - a.f);
+    const top = cand.slice(0, NB);
+    const fRef = top[Math.floor(NB * 0.02)].f;
+    const pos = new Float32Array((NB + NL) * 3), col = new Float32Array((NB + NL) * 3), size = new Float32Array(NB + NL);
+    const put = (i, x, y, z, b, r, g, bl) => {
+      pos[i * 3] = x * R; pos[i * 3 + 1] = y * R; pos[i * 3 + 2] = z * R;
+      // צבע: חצי מהצבע של התמונה וחצי לבן (כוכבים נראים לבנים יותר מהענן שהם יוצרים יחד)
+      col[i * 3] = b * (0.5 + 0.5 * r); col[i * 3 + 1] = b * (0.5 + 0.5 * g); col[i * 3 + 2] = b * (0.5 + 0.5 * bl);
+      size[i] = 1.3 + 1.6 * Math.min(1, b);
+    };
+    top.forEach((c, i) => put(i, c.x, c.y, c.z, Math.min(1.4, 0.25 + 0.75 * Math.sqrt(c.f / fRef)), c.r, c.g, c.b));
+    for (let i = 0; i < NL; i++) {
+      const u = random() * 2 - 1, phi = random() * Math.PI * 2, sn = Math.sqrt(1 - u * u);
+      const t = random(), warm = random();
+      const c = warm < 0.25 ? [1, 0.82, 0.62] : warm < 0.55 ? [1, 0.95, 0.88] : [0.82, 0.88, 1];
+      put(NB + i, sn * Math.cos(phi), u, sn * Math.sin(phi), 0.22 + 1.1 * t ** 6, ...c);
+    }
+    const geo = skyStars.geometry;
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(size, 1));
+  }
+  // הפיקסלים של תמונת הגלקסיה (512×512), פעם אחת: משמשים גם לכוכבים בשמיים וגם לגלקסיה מבחוץ
+  let photoPxPromise = null;
+  const loadPhotoPx = () => (photoPxPromise ||= new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 512;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, 512, 512);
+      resolve(ctx.getImageData(0, 0, 512, 512).data);
+    };
+    img.src = 'textures/sky/m101-1k.jpg';
+  }));
+  if (GALAXY_PHOTO) loadPhotoPx().then(buildSkyStars);
 
   // הגלקסיה נבנית רק כשמגיעים לאחת התחנות שלה בפעם הראשונה
   // הנקודות מהתמונה: הגרלה לפי הבהירות (יותר נקודות במקומות בהירים), וגובה אקראי לפי העובי של הגלקסיה באותו מרחק מהמרכז
@@ -996,16 +1086,10 @@ const milky = (() => {
 
   const load = () => {
     if (GALAXY_PHOTO && !photoPoints.geometry.attributes.position) {
-      const img = new Image();
-      img.onload = () => {
-        const cv = document.createElement('canvas');
-        cv.width = cv.height = 512;
-        const ctx = cv.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0, 512, 512);
-        photoPx = ctx.getImageData(0, 0, 512, 512).data;
+      loadPhotoPx().then((data) => {
+        photoPx = data;
         buildPhotoPoints();
-      };
-      img.src = 'textures/sky/m101-1k.jpg';
+      });
       photoPoints.geometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
     }
     // הגלקסיה הקודמת מהקוד (גיבוי) נבנית רק כשמשתמשים בה – היא כבדה, ובנייה שלה באמצע טיסה גורמת לקרטוע
@@ -1019,7 +1103,7 @@ const milky = (() => {
     disk.material.map = paintHaze(gal);
     disk.material.needsUpdate = true;
   };
-  return { disk, core, photo, photoU, photoPlane, photoMat, warm: () => warmup > 0 && warmup--, starCount, defaultStars, setStarCount, bulge, bulgeU, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
+  return { skyStars, skyStarsMat, disk, core, photo, photoU, photoPlane, photoMat, warm: () => warmup > 0 && warmup--, starCount, defaultStars, setStarCount, bulge, bulgeU, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -1082,6 +1166,10 @@ function updateMilkyWay(dt) {
   // מבחוץ מערכת השמש קטנה מנקודה – מסתירים את הגופים עצמם (הסימון "אנחנו כאן" מראה איפה היא)
   for (const b of bodies) b.group.visible = milkyMix < 0.5;
   starField.material.opacity = 1 - milkyMix;
+  // עם הגלקסיה מהתמונה, הכוכבים החדים בשמיים (skyStars) מחליפים את הכוכבים האקראיים
+  starField.visible = !GALAXY_PHOTO;
+  milky.skyStarsMat.uniforms.uOpacity.value = 1 - milkyMix;
+  milky.skyStarsMat.uniforms.uPR.value = renderer.getPixelRatio();
   controls.maxDistance = on || tween || followBody === milkyInfo || freeGalaxy ? 60000 : ZOOM_LIMIT;
   if (!on) {
     milky.hereLabel.style.display = milky.centreLabel.style.display = 'none';
