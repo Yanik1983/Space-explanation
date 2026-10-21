@@ -1587,6 +1587,13 @@ function placePresenter() {
   if (pos !== presenterPos) presenterEl.style.transform = presenterPos = pos;
 }
 
+// מעבר רך בין השפות: הדף מתעמעם ורק אז עוברים
+document.querySelectorAll('a[hreflang]').forEach((a) => a.addEventListener('click', (e) => {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  document.body.classList.add('leaving');
+  setTimeout(() => { location.href = a.href; }, 350);
+}));
 $('btn-guide').addEventListener('click', () => {
   guideOn = !guideOn;
   presenterEl.hidden = !guideOn;
