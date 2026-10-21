@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [welcome-takes, welcome-words]
+        group: [gravity-takes, gravity-words]
     steps:
       - uses: actions/checkout@v4
 
