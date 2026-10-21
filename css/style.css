@@ -468,3 +468,10 @@ body.term-open #panel { visibility: hidden; }
 body { animation: page-in 0.6s ease-out both; }
 body.leaving { opacity: 0; transition: opacity 0.35s ease-in; }
 @media (prefers-reduced-motion: reduce) { body { animation: none; } body.leaving { transition: none; } }
+
+/* אפשרויות למפתחים בתוך ההגדרות (מוסתרות כברירת מחדל) */
+.dev-settings { margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(255, 255, 255, 0.2); }
+.dev-settings h3 { margin: 0 0 10px; font-size: 15px; }
+.dev-settings select { width: 100%; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); color: inherit; border: 1px solid rgba(255, 255, 255, 0.2); font: inherit; }
+.dev-settings select option { color: #000; }
+.dev-note { font-size: 12px; opacity: 0.75; margin: 4px 0 10px; }
