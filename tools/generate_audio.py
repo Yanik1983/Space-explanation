@@ -125,10 +125,18 @@ HE_PRONUNCIATION = [
 ]
 
 
+# משפטים שלמים שמוקלטים בניסוח אחר (למשל עם פסיק שמזיז את ההדגשה). נבחרו בהאזנה לדוגמאות.
+HE_SENTENCE_OVERRIDES = {
+    "זה נוגה.": "זה, נוגַה.",
+}
+
+
 def spoken(sentence):
     """הטקסט כפי שנשלח למודל. כשהוא זהה למקור, שם הקובץ נשאר כמו קודם, ולכן רק משפטים שהשתנו מוקלטים מחדש."""
     if LANG != "he":
         return sentence
+    if sentence in HE_SENTENCE_OVERRIDES:
+        return HE_SENTENCE_OVERRIDES[sentence]
     for word, fixed in HE_PRONUNCIATION:
         sentence = re.sub(rf"(?<![א-ת])([ולבהמכש]{{0,3}}){word}(?![א-ת])", rf"\1{fixed}", sentence)
     return sentence
