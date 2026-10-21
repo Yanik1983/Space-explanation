@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [ellipse2, ellipse-sing, venus3, venus-punct]
+        group: [ellipse-takes, ellipse-latin, ellipse-latin-sing]
     steps:
       - uses: actions/checkout@v4
 

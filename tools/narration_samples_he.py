@@ -35,6 +35,15 @@ GROUPS = [
      ["אֶלִּיפְּסוֹת", "אֶלִּיפּסוֹת", "אֶלִייפְּסוֹת", "אֶלִּייפְּסוֹת", "אֶ־לִיפּ־סוֹת"]),
     ("ellipse-sing", "{w} היא צורה כמו עיגול קצת מעוך, דומה לביצה שוכבת.",
      ["אליפסה", "אֶלִּיפְּסָה", "אֶלִייפְּסָה"]),
+    # אליפסות, סבב חמישי: אותו משפט בלי שום שינוי בכתיבה, בכמה הקלטות שונות (seed). למודל יש אקראיות,
+    # ולפעמים הוא מבטא את המילה נכון בהקלטה אחת ולא באחרת. כאן כל "מילה" היא מספר ה־seed.
+    ("ellipse-takes", "המסלולים הם לא עיגולים מושלמים, אלא אליפסות, כמו עיגול קצת מעוך.", ["2", "3", "4", "5", "6", "7", "8"]),
+    # אליפסות, סבב שישי: כתיבה באותיות לטיניות באמצע המשפט העברי. כמו ששם באנגלית מבוטא נכון כשכותבים אותו בעברית,
+    # ייתכן שהמודל יבטא "elipsot" כמו שמבטאים ellipse באנגלית: אי־ליפס, עם ההדגשה על ה־i השני.
+    ("ellipse-latin", "המסלולים הם לא עיגולים מושלמים, אלא {w}, כמו עיגול קצת מעוך.",
+     ["elipsot", "ellipsot", "e-lip-sot", "eLIPsot", "ilipsot"]),
+    ("ellipse-latin-sing", "{w} היא צורה כמו עיגול קצת מעוך, דומה לביצה שוכבת.",
+     ["Elipsa", "Ellipsa", "ilipsa"]),
     # ניסוחים חדשים למשפט "לנוגה יש עוד מוזרות" (המילה "מוזרות" והצמד "לנוגה" נשמעו לא טוב)
     ("venus-new", "ל{w} יש עוד מאפיינים מוזרים: הוא מסתובב סביב עצמו בכיוון הפוך מרוב כוכבי הלכת, ולאט מאוד.",
      ["נוגה", "נוֹגַהּ", "נוֹגָה"]),
@@ -54,9 +63,10 @@ async def main():
             continue
         rows.append(f"<h2>{base.format(w='…')}</h2>")
         for n, w in enumerate(words, 1):
-            text = base.format(w=w)
+            seed = int(w) if key.endswith("-takes") else None
+            text = base if seed else base.format(w=w)
             print(f"[{key} {n}/{len(words)}] {text}")
-            await engine.save(text, OUT / f"{key}-{n}.mp3", chunks=[text])
+            await engine.save(text, OUT / f"{key}-{n}.mp3", chunks=[text], seed=seed)
             rows.append(f'<section><p>{n}: {w}</p><audio controls preload="none" src="{key}-{n}.mp3"></audio></section>')
     if only:
         return

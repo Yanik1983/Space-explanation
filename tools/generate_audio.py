@@ -216,7 +216,7 @@ class VoxCPMEngine:
             self.settings += "|en|noam-heb"
         self.model = None  # נטען רק כשבאמת צריך ליצור קול (לא ב־--finalize)
 
-    async def save(self, sentence, path, chunks=None):
+    async def save(self, sentence, path, chunks=None, seed=None):
         import soundfile as sf
         import torch
         if self.model is None:
@@ -229,7 +229,7 @@ class VoxCPMEngine:
         pause, end = (V2_COMMA_PAUSE, V2_END_PAUSE) if v2 else (COMMA_PAUSE, END_PAUSE)
         parts = []
         for i, chunk in enumerate(chunks or (v2_chunks(sentence) if v2 else comma_chunks(sentence))):
-            torch.manual_seed(VOXCPM_SEED)
+            torch.manual_seed(VOXCPM_SEED if seed is None else seed)
             chunk = spoken(chunk)
             if LANG == "en":
                 chunk = chunk.replace("Ofek", "אופק")  # באנגלית השם נשמע לא נכון; בכתיבה עברית הוא מבוטא כמו שאופק אומר אותו
