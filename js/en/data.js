@@ -395,5 +395,5 @@ export const MILKY_WAY = {
     'The Milky Way is so big that even light, the fastest thing there is, needs a hundred thousand years to cross it from one end to the other. ' +
     'At the center of the galaxy hides a giant black hole, four million times heavier than the Sun. ' +
     'And one more secret: nobody has ever taken a picture of our galaxy from the outside, because no spacecraft has gone so far. ' +
-    'The scientists drew this picture based on what they see from the inside.',
+    'This picture shows a galaxy similar to ours, photographed by the Hubble Space Telescope. This is roughly how the Milky Way would look from the outside.',
 };

@@ -722,6 +722,9 @@ const GAL_CENTRE_DIR = poleVector([266.405, -28.936]); // מרכז הגלקסי�
 // המצלמה מכוונת לנקודה שבין מרכז הגלקסיה לשמש, כדי שגם המרכז וגם "אנחנו כאן" ייראו
 const milkyInfo = { data: MILKY_WAY, isMilky: true, moons: [], group: new THREE.Object3D() };
 const galaxyGroup = new THREE.Group();
+// מבחוץ שביל החלב מצויר כתמונת האבל של גלקסיה ספירלית דומה לשלנו (M101), שמסתובבת לאט. אי אפשר לצלם את שלנו מבחוץ.
+// הציור הקודם (מודל מכוכבים וענני אבק) נשמר כגיבוי: מוסיפים ‎?galaxy=model‎ לכתובת
+const GALAXY_PHOTO = new URLSearchParams(location.search).get('galaxy') !== 'model';
 let milkyMix = 0, milkyTarget = 0;
 const milky = (() => {
   const g = galaxyGroup;
@@ -761,6 +764,15 @@ const milky = (() => {
     $('labels').appendChild(el);
     return el;
   };
+  // התמונה (ההפוכה, כדי שהזרועות ייגררו כמו אצלנו) על משטח שמסתובב עם הגלקסיה. הרקע השחור שלה לא מוסיף אור
+  const photo = new THREE.Mesh(
+    new THREE.PlaneGeometry(GAL_R * 2.5, GAL_R * 2.5),
+    new THREE.MeshBasicMaterial({ map: imageTexture(window.innerWidth <= 720 ? 'textures/sky/m101-1k.jpg' : 'textures/sky/m101.jpg'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  photo.rotation.x = -Math.PI / 2;
+  photo.frustumCulled = false;
+  photo.visible = false;
+  holder.add(photo);
   disk.visible = core.visible = here.visible = false;
   // נקודת השמש על הדיסק: מסתובבת יחד עם הגלקסיה
   const sunAnchor = new THREE.Object3D();
@@ -878,7 +890,7 @@ const milky = (() => {
     disk.material.map = paintHaze(gal);
     disk.material.needsUpdate = true;
   };
-  return { disk, core, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
+  return { disk, core, photo, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -905,6 +917,8 @@ function updateMilkyWay(dt) {
   milky.skyDome.position.copy(camera.position);
   const on = milkyMix > 0.001;
   for (const o of [milky.disk, milky.core, milky.here, milky.starPoints, milky.dustPoints, milky.glowPoints]) o.visible = on;
+  milky.photo.visible = on && GALAXY_PHOTO;
+  if (GALAXY_PHOTO) milky.disk.visible = milky.core.visible = milky.dustPoints.visible = milky.glowPoints.visible = false;
   if (!on && inside > 0.001) {
     // גם הכוכבים עצמם של הגלקסיה נראים מבפנים: הגלקסיה חוזרת למקום שבו השמש נמצאת בדיוק אצלנו
     milky.holder.rotation.y = Math.PI / 2;
@@ -939,6 +953,11 @@ function updateMilkyWay(dt) {
     m.uniforms.uOpacity.value = milkyMix;
     m.uniforms.uTime.value = t;
     m.uniforms.uScale.value = (renderer.domElement.height / 2) / Math.tan((camera.fov * DEG) / 2);
+  }
+  if (GALAXY_PHOTO) {
+    // התמונה מרחוק, והכוכבים התלת־ממדיים מקרוב (בדרך פנימה): כל אחד נעלם כשהשני מופיע
+    milky.photo.material.opacity = milkyMix * out * (bloomOn ? 0.8 : 1);
+    milky.starsMat.uniforms.uOpacity.value = milkyMix * (1 - out);
   }
   // שכבת הזוהר השטוחה נראית טוב רק מרחוק; מקרוב (בדרך פנימה) היא נראית כמו ריבוע מטושטש
   milky.disk.material.opacity = milkyMix * 0.9 * glowK * out;
