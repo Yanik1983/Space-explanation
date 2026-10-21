@@ -1383,7 +1383,8 @@ function flyTo(body, duration = null, pose = null) {
   const toPos = body ? toTarget.clone().add(offset) : pose ? pose() : overviewPosition();
   const r0 = Math.max(1e-3, from.pos.distanceTo(from.target)), r1 = Math.max(1e-3, toPos.distanceTo(toTarget));
   const travel = from.target.distanceTo(toTarget);
-  const rPeak = Math.max(r0, r1, travel * 0.7);
+  // לחור השחור מתרחקים הרבה יותר, כדי שמערכת השמש תיעלם לגמרי לפני שמתקרבים אליו
+  const rPeak = Math.max(r0, r1, travel * (body?.isBlackHole || followBody?.isBlackHole ? 2.6 : 0.7));
   const la = Math.log(r0), lb = Math.log(r1);
   // נקודת הביקורת של עקומת בזייה (ריבועית) בסולם הלוגריתמי: באמצע הדרך המרחק מגיע בערך ל־rPeak
   const lc = rPeak > Math.max(r0, r1) * 1.05 ? 2 * Math.log(rPeak) - (la + lb) / 2 : (la + lb) / 2;
