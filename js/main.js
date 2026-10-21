@@ -832,7 +832,7 @@ function updateMilkyWay(dt) {
   // מבחוץ מערכת השמש קטנה מנקודה – מסתירים את הגופים עצמם (הסימון "אנחנו כאן" מראה איפה היא)
   for (const b of bodies) b.group.visible = milkyMix < 0.5;
   starField.material.opacity = 1 - milkyMix;
-  controls.maxDistance = on || followBody === milkyInfo ? 60000 : 8000;
+  controls.maxDistance = on || tween || followBody === milkyInfo ? 60000 : 8000;
   if (!on) {
     milky.hereLabel.style.display = milky.centreLabel.style.display = 'none';
     return;
@@ -867,13 +867,14 @@ function updateMilkyWay(dt) {
 // והקרן פוגעת בטבעת הגז, בכוכב השכן, נבלעת בחור – או בורחת ומראה את השמיים שמאחור, מעוקמים.
 // המרחק והגודל לא בקנה מידה (באמת הוא רחוק פי מאה מיליון מנפטון, וקטן בהרבה מהשמש).
 const BH_DIR = poleVector([262.171, -0.581]);
+const BH_DIST = 6000; // רחוק מאוד מהשמש: הטיסה אליו מתרחקת קודם עד שמערכת השמש נעלמת, ורק אז מתקרבת
 const BH_RS = 12; // רדיוס אופק האירועים, ביחידות של התצוגה
 const BH_R = 80; // הרדיוס (באופקי אירועים) של הכדור שבתוכו מחושב העיקום. המצלמה בתוכו, כך שכל השמיים שרואים מעוקמים
 const blackHoleInfo = { data: BLACK_HOLE, isBlackHole: true, moons: [], group: new THREE.Object3D() };
 let bhMix = 0, bhTarget = 0;
 const blackHole = (() => {
   const g = blackHoleInfo.group;
-  g.position.copy(BH_DIR).multiplyScalar(2600);
+  g.position.copy(BH_DIR).multiplyScalar(BH_DIST);
   // מסתכלים על החור לכיוון מרכז הגלקסיה, כך ששביל החלב והמרכז הבהיר שלו נמצאים בדיוק מאחוריו.
   // ציר z של החור פונה אל המצלמה, וטבעת הגז (במישור xz) אופקית על המסך, כמו בסרט. שביל החלב חוצה את המסך באלכסון
   const z = GAL_CENTRE_DIR.clone().negate();
@@ -1934,7 +1935,7 @@ function showBody(body) {
   if (body === blackHoleInfo) {
     markActive(blackHoleInfo);
     presenter.play('open', 2.6);
-    flyTo(blackHoleInfo, 4);
+    flyTo(blackHoleInfo, 7);
     const d = BLACK_HOLE;
     return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
   }
