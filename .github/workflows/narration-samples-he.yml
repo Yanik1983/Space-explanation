@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [planets-the2]
+        group: [welcome-takes, welcome-words]
     steps:
       - uses: actions/checkout@v4
 

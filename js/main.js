@@ -63,7 +63,8 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.enablePan = false;
-controls.maxDistance = 8000;
+const ZOOM_LIMIT = 8000; // הכי רחוק שאפשר להתרחק בתוך מערכת השמש; מעבר לזה – טסים אל שביל החלב
+controls.maxDistance = ZOOM_LIMIT;
 
 // הרקע: שביל החלב שבנינו (כדור השמיים, ראו "שביל החלב מבחוץ"), כך שכל האתר הוא עולם אחד
 scene.background = null;
@@ -727,6 +728,8 @@ const galaxyGroup = new THREE.Group();
 // הציור הקודם (מודל מכוכבים וענני אבק) נשמר כגיבוי: מוסיפים ‎?galaxy=model‎ לכתובת
 const GALAXY_PHOTO = new URLSearchParams(location.search).get('galaxy') !== 'model';
 let milkyMix = 0, milkyTarget = 0;
+// זום חופשי: כשמתרחקים עד הגבול, האפליקציה טסה בעצמה אל שביל החלב מבחוץ – בלי תחנה, בלי הסבר ובלי קריין
+let freeGalaxy = false;
 const milky = (() => {
   const g = galaxyGroup;
   g.position.copy(GAL_CENTRE_DIR).multiplyScalar(GAL_SUN_R);
@@ -914,7 +917,7 @@ const milky = (() => {
   // (tools/paint-sky.mjs), עם מיליוני כוכבים ועננים של אבק. הכדור נע עם המצלמה, ולכן השמיים תמיד "באינסוף".
   // עם הגלקסיה מהתמונה – השמיים מצוירים ממנה (tools/paint-sky-photo.mjs), כך שבפנים ובחוץ זו אותה גלקסיה
   const skyName = GALAXY_PHOTO ? 'galaxy-photo' : 'galaxy';
-  const skyMap = imageTexture(window.innerWidth <= 720 ? `textures/sky/${skyName}-2k.jpg` : `textures/sky/${skyName}.jpg`);
+  const skyMap = imageTexture(`textures/sky/${skyName}.jpg`); // גם בטלפון ברזולוציה המלאה (4096×2048), כדי שהשמיים יהיו חדים יותר
   const skyDome = new THREE.Mesh(
     new THREE.SphereGeometry(40000, 96, 48),
     new THREE.MeshBasicMaterial({ map: skyMap, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }),
@@ -1031,8 +1034,8 @@ function updateMilkyWay(dt) {
     const k = THREE.MathUtils.clamp((Math.log(camera.position.length()) - Math.log(1800)) / (Math.log(16000) - Math.log(1800)), 0, 1);
     fadeP.milky = k;
     milkyMix = k * k * (3 - 2 * k);
-  } else milkyMix = stepFade('milky', milkyTarget, 2.5, 1.5, dt);
-  if (milkyTarget || motionTarget || bhTarget) milky.load();
+  } else milkyMix = stepFade('milky', milkyTarget || freeGalaxy ? 1 : 0, 2.5, 1.5, dt);
+  if (milkyTarget || motionTarget || bhTarget || freeGalaxy || camera.position.distanceTo(controls.target) > 5000) milky.load();
   // בתחנות "טסים בחלל" ו"חור שחור" שביל החלב שברקע הוא הגלקסיה מהקוד, כפי שהיא נראית מבפנים (במקום הצילום)
   const inside = Math.max(motionMix, bhMix) * (1 - milkyMix);
   // השמיים נעלמים רק כשיוצאים מהגלקסיה (אז רואים אותה מבחוץ)
@@ -1070,7 +1073,7 @@ function updateMilkyWay(dt) {
   // מבחוץ מערכת השמש קטנה מנקודה – מסתירים את הגופים עצמם (הסימון "אנחנו כאן" מראה איפה היא)
   for (const b of bodies) b.group.visible = milkyMix < 0.5;
   starField.material.opacity = 1 - milkyMix;
-  controls.maxDistance = on || tween || followBody === milkyInfo ? 60000 : 8000;
+  controls.maxDistance = on || tween || followBody === milkyInfo || freeGalaxy ? 60000 : ZOOM_LIMIT;
   if (!on) {
     milky.hereLabel.style.display = milky.centreLabel.style.display = 'none';
     return;
@@ -1603,6 +1606,7 @@ function overviewPosition() {
 }
 
 function flyTo(body, duration = null, pose = null) {
+  freeGalaxy = false;
   const from = { pos: camera.position.clone(), target: controls.target.clone() };
   let offset;
   if (!body) {
@@ -2282,6 +2286,30 @@ $('btn-overview').addEventListener('click', () => {
 milky.hereLabel.title = tt('לחצו כדי לטוס אל מערכת השמש', 'Tap to fly to the solar system');
 milky.hereLabel.addEventListener('click', () => $('btn-overview').click());
 
+// זום אאוט מעבר לגבול: האפליקציה טסה מהר אל שביל החלב מבחוץ (בלי תחנה ובלי קריין), והגלקסיה מסתובבת.
+// זום אין חזרה (עד שנכנסים לתוך הגלקסיה) טס בחזרה אל מערכת השמש
+function autoZoom(out) {
+  if (tween) return;
+  const dist = camera.position.distanceTo(controls.target);
+  if (out && !freeGalaxy && followBody !== milkyInfo && dist >= controls.maxDistance * 0.97) {
+    if (tour) endTour();
+    closePanel();
+    flyTo(milkyInfo, 3);
+    freeGalaxy = true;
+  } else if (!out && freeGalaxy && dist < GAL_R * 0.8) {
+    $('btn-overview').click();
+  }
+}
+renderer.domElement.addEventListener('wheel', (e) => e.deltaY && autoZoom(e.deltaY > 0), { passive: true });
+let pinchD = 0;
+renderer.domElement.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 2) return (pinchD = 0);
+  const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  if (pinchD && Math.abs(d - pinchD) > 4) autoZoom(d < pinchD);
+  pinchD = d;
+}, { passive: true });
+renderer.domElement.addEventListener('touchend', () => (pinchD = 0), { passive: true });
+
 $('btn-voice').addEventListener('click', () => {
   voiceOn = !voiceOn;
   $('btn-voice').textContent = voiceOn ? '🔊' : '🔇';
@@ -2651,6 +2679,10 @@ $('start-free').addEventListener('click', () => {
   closeIntro();
   // "פותח" את ההקראה בדפדפנים שדורשים לחיצה של המשתמש (למשל ספארי)
   narrator.unlock();
+});
+// לחיצה מחוץ לחלון הפתיחה עושה כמו "לחקור לבד"
+$('intro').addEventListener('click', (e) => {
+  if (!e.target.closest('.intro-card')) $('start-free').click();
 });
 
 function updateVoiceNote() {
