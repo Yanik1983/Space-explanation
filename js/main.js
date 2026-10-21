@@ -257,21 +257,28 @@ function sunFlareMaterial() {
       varying vec2 vP;
       float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
       float n1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(i), h1(i + 1.0), f); }
+      // רעש שחוזר על עצמו כל K יחידות (K שלם), כדי שלא יהיה "תפר" בזווית ±π, שבו הלהבות נחתכות בקו ישר
+      float np(float x, float K) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(mod(i, K)), h1(mod(i + 1.0, K)), f); }
       void main() {
         ${LOGDEPTH_F[1]}
         float r = length(vP);
         if (r < 0.995) discard;
         float a = atan(vP.y, vP.x);
         float d = r - 1.0;
-        // לשונות אש קטנות: גובה כל לשון משתנה לאט, ולכן הן צומחות ונעלמות
         float u = a / 6.2831853 + 0.5;
-        float tongue = pow(n1(u * 22.0 + uTime * 0.7), 1.8) * (0.3 + 0.7 * n1(u * 7.0 - uTime * 0.35));
-        float h = 0.05 + 0.5 * tongue;
+        // לשונות אש: שלושה גדלים של רעש (גדולות, בינוניות ודקות), שכל אחד זז בקצב אחר
+        float big = np(u * 12.0 + uTime * 0.25, 12.0);
+        float mid = np(u * 30.0 - uTime * 0.6, 30.0);
+        float fine = np(u * 84.0 + uTime * 1.3, 84.0);
+        float tongue = pow(clamp(0.55 * big + 0.3 * mid + 0.15 * fine, 0.0, 1.0), 1.5) * (0.35 + 0.65 * np(u * 7.0 - uTime * 0.3, 7.0));
+        float h = 0.05 + 0.7 * tongue;
         float v = clamp(1.0 - d / h, 0.0, 1.0);
-        float I = pow(v, 1.3) * (0.6 + 0.4 * n1(u * 70.0 + uTime * 2.0)) * 1.5;
-        vec3 col = mix(vec3(1.0, 0.42, 0.08), vec3(1.0, 0.95, 0.72), pow(v, 1.5));
-        I += 0.5 * exp(-d * 14.0);          // זוהר דק לאורך כל השפה
-        // התפרצויות: קשתות של גז לוהט שעולות מהשפה, ואחריהן ענן שנפלט החוצה
+        // סיבים לאורך הלהבה (דקים וזזים כלפי מעלה), כדי שכל לשון תיראה מורכבת משלהבות קטנות
+        float fil = 0.45 + 0.55 * np(u * 140.0 + d * 12.0 - uTime * 1.6, 140.0);
+        float I = pow(v, 1.25) * fil * 1.7;
+        vec3 col = mix(vec3(1.0, 0.36, 0.06), vec3(1.0, 0.95, 0.7), pow(v, 1.4));
+        I += 0.5 * exp(-d * 14.0);
+        // התפרצויות: קשתות של גז לוהט (שבע חוטים דקים בגבהים שונים) ואחריהן ענן שנפלט
         for (int i = 0; i < 3; i++) {
           vec4 e = uE[i];
           if (e.w < 0.5) continue;
@@ -281,21 +288,34 @@ function sunFlareMaterial() {
           if (abs(da) < e.z) {
             float uu = da / e.z;
             float rise = smoothstep(0.0, 0.5, p);
-            for (int k = 0; k < 3; k++) {
-              float s = 0.55 + 0.22 * float(k);
-              float Hs = e.w * s * rise * pow(cos(uu * 1.5707963), 0.85);
-              float th = 0.016 + 0.022 * (1.0 - abs(uu)) + 0.006 * float(k);
+            float shape = pow(cos(uu * 1.5707963), 0.85);
+            for (int k = 0; k < 7; k++) {
+              float fk = float(k);
+              float s = 0.42 + 0.58 * h1(fk * 3.7 + e.x * 5.0);
+              float wob = 0.02 * (n1(uu * 6.0 + fk * 5.0 + uTime * 0.9) - 0.5) * 2.0 * rise;
+              float Hs = e.w * s * rise * shape + wob;
+              float th = 0.006 + 0.01 * (1.0 - abs(uu)) + 0.004 * h1(fk * 1.9);
               float z = (d - Hs) / th;
-              float strand = 0.65 + 0.35 * n1(uu * 14.0 + float(k) * 7.0 + uTime * 1.5);
-              I += exp(-z * z) * strand * fade * 1.6;
-              col = mix(col, vec3(1.0, 0.7, 0.35), exp(-z * z) * 0.5);
+              float strand = 0.45 + 0.55 * n1(uu * 26.0 + fk * 9.0 + uTime * 2.2);
+              float g = exp(-z * z);
+              I += g * strand * fade * 1.4;
+              col = mix(col, vec3(1.0, 0.82, 0.5), g * 0.5);
+              // החוט נראה בהיר יותר ברגליים של הקשת, ליד השפה
+              I += g * fade * 0.8 * smoothstep(0.55, 1.0, abs(uu));
             }
+            // זוהר רך מתחת לקשת, כמו גז שמתמלא בין החוטים
+            float hmax = e.w * rise * shape;
+            I += 0.18 * fade * smoothstep(hmax, hmax * 0.4, d) * step(0.0, d);
           }
           if (p > 0.25) {
             float q = p - 0.25;
             vec2 c = (1.0 + e.w * (0.55 + 2.4 * q)) * vec2(cos(e.x), sin(e.x));
             float rad = 0.16 + 0.55 * q;
-            I += 0.6 * exp(-dot(vP - c, vP - c) / (rad * rad)) * (1.0 - smoothstep(0.35, 0.8, q * 1.33)) * smoothstep(0.0, 0.1, q);
+            vec2 w = vP - c;
+            float cloud = exp(-dot(w, w) / (rad * rad));
+            // הענן הנפלט נראה מקושקש ולא כדור חלק
+            cloud *= 0.6 + 0.4 * n1(atan(w.y, w.x) * 3.0 + length(w) * 18.0 - uTime * 2.0);
+            I += 0.6 * cloud * (1.0 - smoothstep(0.35, 0.8, q * 1.33)) * smoothstep(0.0, 0.1, q);
           }
         }
         gl_FragColor = vec4(col * uBoost, clamp(I, 0.0, 1.0) * smoothstep(3.1, 2.2, r));
