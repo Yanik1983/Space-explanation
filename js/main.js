@@ -23,6 +23,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const sunView = { value: new THREE.Vector3() };
 // הזמן של האנימציה על פני השמש, וכמה להבהיר אותה כשיש זוהר (bloom)
 const sunUniforms = { uTime: { value: 0 }, uBoost: { value: 1 } };
+const sunErupt = { uE: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] } };
 const LOGDEPTH_V = ['#include <common>\n#include <logdepthbuf_pars_vertex>', '#include <logdepthbuf_vertex>'];
 const LOGDEPTH_F = ['#include <common>\n#include <logdepthbuf_pars_fragment>', '#include <logdepthbuf_fragment>'];
 const moonImage = imageTexture('textures/moon_1024.jpg');
@@ -231,6 +232,73 @@ function sunMaterial(map) {
         // השוליים כהים ואדמדמים יותר מהמרכז (limb darkening)
         c *= (0.45 + 0.65 * pow(mu, 0.5)) * mix(vec3(1.0, 0.6, 0.35), vec3(1.0), pow(mu, 0.35));
         gl_FragColor = vec4(c * uBoost, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+}
+
+// להבות על שפת השמש והתפרצויות סולאריות: לוח שתמיד פונה למצלמה, ובו מצוירות לשונות אש שצומחות ודועכות לאורך השפה,
+// ומדי פעם קשתות ענק של גז לוהט שעולות מהשפה ונפלטות לחלל. הפנים של השמש נשארות חשופות (r < 1)
+function sunFlareMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...sunUniforms, ...sunErupt },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `${LOGDEPTH_V[0]}
+      varying vec2 vP;
+      void main() {
+        vP = position.xy / ${SUN.size.toFixed(4)};
+        vec4 mv = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+        mv.xy += position.xy * length(modelViewMatrix[0].xyz);
+        gl_Position = projectionMatrix * mv;
+        ${LOGDEPTH_V[1]}
+      }`,
+    fragmentShader: `${LOGDEPTH_F[0]}
+      uniform float uTime; uniform float uBoost; uniform vec4 uE[3];
+      varying vec2 vP;
+      float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+      float n1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(i), h1(i + 1.0), f); }
+      void main() {
+        ${LOGDEPTH_F[1]}
+        float r = length(vP);
+        if (r < 0.995) discard;
+        float a = atan(vP.y, vP.x);
+        float d = r - 1.0;
+        // לשונות אש קטנות: גובה כל לשון משתנה לאט, ולכן הן צומחות ונעלמות
+        float u = a / 6.2831853 + 0.5;
+        float tongue = pow(n1(u * 22.0 + uTime * 0.7), 1.8) * (0.3 + 0.7 * n1(u * 7.0 - uTime * 0.35));
+        float h = 0.05 + 0.5 * tongue;
+        float v = clamp(1.0 - d / h, 0.0, 1.0);
+        float I = pow(v, 1.3) * (0.6 + 0.4 * n1(u * 70.0 + uTime * 2.0)) * 1.5;
+        vec3 col = mix(vec3(1.0, 0.42, 0.08), vec3(1.0, 0.95, 0.72), pow(v, 1.5));
+        I += 0.5 * exp(-d * 14.0);          // זוהר דק לאורך כל השפה
+        // התפרצויות: קשתות של גז לוהט שעולות מהשפה, ואחריהן ענן שנפלט החוצה
+        for (int i = 0; i < 3; i++) {
+          vec4 e = uE[i];
+          if (e.w < 0.5) continue;
+          float p = e.y;
+          float da = a - e.x; da = atan(sin(da), cos(da));
+          float fade = smoothstep(0.0, 0.08, p) * (1.0 - smoothstep(0.5, 0.95, p));
+          if (abs(da) < e.z) {
+            float uu = da / e.z;
+            float rise = smoothstep(0.0, 0.5, p);
+            for (int k = 0; k < 3; k++) {
+              float s = 0.55 + 0.22 * float(k);
+              float Hs = e.w * s * rise * pow(cos(uu * 1.5707963), 0.85);
+              float th = 0.016 + 0.022 * (1.0 - abs(uu)) + 0.006 * float(k);
+              float z = (d - Hs) / th;
+              float strand = 0.65 + 0.35 * n1(uu * 14.0 + float(k) * 7.0 + uTime * 1.5);
+              I += exp(-z * z) * strand * fade * 1.6;
+              col = mix(col, vec3(1.0, 0.7, 0.35), exp(-z * z) * 0.5);
+            }
+          }
+          if (p > 0.25) {
+            float q = p - 0.25;
+            vec2 c = (1.0 + e.w * (0.55 + 2.4 * q)) * vec2(cos(e.x), sin(e.x));
+            float rad = 0.16 + 0.55 * q;
+            I += 0.6 * exp(-dot(vP - c, vP - c) / (rad * rad)) * (1.0 - smoothstep(0.35, 0.8, q * 1.33)) * smoothstep(0.0, 0.1, q);
+          }
+        }
+        gl_FragColor = vec4(col * uBoost, clamp(I, 0.0, 1.0) * smoothstep(3.1, 2.2, r));
         #include <colorspace_fragment>
       }`,
   });
@@ -1067,6 +1135,11 @@ function createBody(data, isSun) {
     glow.scale.setScalar(data.size * 5.5);
     group.add(glow);
     body.glow = glow;
+    const flares = new THREE.Mesh(new THREE.PlaneGeometry(data.size * 6.4, data.size * 6.4), sunFlareMaterial());
+    flares.frustumCulled = false;
+    flares.renderOrder = 2;
+    group.add(flares);
+    body.flares = flares;
   } else {
     body.orbitLine = createOrbit(data.color);
   }
@@ -2142,6 +2215,21 @@ let sunPulse = 99;
 function pulseSun() {
   sunPulse = 0;
 }
+// התפרצויות סולאריות: כל התפרצות נמשכת כ־11 שניות, ולא יותר משלוש יחד. e = (זווית על השפה, התקדמות 0..1, חצי רוחב, גובה)
+const eruptions = [0, 1, 2].map(() => ({ on: false, t: 0, dur: 11, angle: 0, width: 0.3, amp: 0.6 }));
+let eruptWait = 1.5;
+function updateEruptions(dt) {
+  eruptWait -= dt;
+  const free = eruptions.find((x) => !x.on);
+  if (eruptWait <= 0 && free) {
+    Object.assign(free, { on: true, t: 0, angle: Math.random() * Math.PI * 2 - Math.PI, width: 0.16 + Math.random() * 0.2, amp: 0.4 + Math.random() * 0.4, dur: 9 + Math.random() * 4 });
+    eruptWait = 3 + Math.random() * 5;
+  }
+  eruptions.forEach((x, i) => {
+    if (x.on && (x.t += dt) >= x.dur) x.on = false;
+    sunErupt.uE.value[i].set(x.angle, x.t / x.dur, x.width, x.on ? x.amp : 0);
+  });
+}
 function updateSunPulse(dt) {
   if (sunPulse > 1.6) return;
   sunPulse += dt;
@@ -2358,6 +2446,7 @@ function frame() {
   watchPerformance(rawDt);
   if (timeRuns()) simDays += Math.max(simSpeed(), MOTION_MIN_SPEED * motionMix) * dt;
   updateSunPulse(dt);
+  updateEruptions(dt);
   if (scaleT !== scaleTarget) {
     scaleT = scaleTarget > scaleT ? Math.min(1, scaleT + dt / 2.8) : Math.max(0, scaleT - dt / 2.8);
     scaleMix = scaleT * scaleT * (3 - 2 * scaleT);
