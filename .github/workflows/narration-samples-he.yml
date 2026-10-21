@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [gravity-takes, gravity-words]
+        group: [venus-takes, venus-comma-takes, venus-words]
     steps:
       - uses: actions/checkout@v4
 
