@@ -134,6 +134,12 @@ HE_SENTENCE_OVERRIDES = {
     "זה נוגה.": "זה, נוגַה.",
 }
 
+# משפטים שמוקלטים עם seed אחר (הקלטה אחרת של אותו טקסט), כי בהקלטה הרגילה משהו נשמע לא טוב. נבחרו בהאזנה לדוגמאות.
+SENTENCE_SEEDS = {
+    # ה־ש בסוף "השמש" נקטעה; נבחרה הדוגמה gravity-takes-1
+    "מה שמחזיק אותם במסלול הוא כוח המשיכה של השמש.": 2,
+}
+
 
 def spoken(sentence):
     """הטקסט כפי שנשלח למודל. כשהוא זהה למקור, שם הקובץ נשאר כמו קודם, ולכן רק משפטים שהשתנו מוקלטים מחדש."""
@@ -156,7 +162,8 @@ def sentences():
 
 def file_name(sentence, settings):
     # המזהה תלוי גם במנוע ובהגדרות הקול, כך ששינוי שלהם יוצר קבצים חדשים
-    key = f"{settings}|{spoken(sentence)}".encode()
+    seed = SENTENCE_SEEDS.get(sentence) if LANG == "he" else None
+    key = f"{settings}|{spoken(sentence)}{f'|seed{seed}' if seed is not None else ''}".encode()
     return hashlib.sha1(key).hexdigest()[:12] + ".mp3"
 
 
@@ -239,6 +246,8 @@ class VoxCPMEngine:
         sr = self.model.tts_model.sample_rate
         v2 = self.style == "v2"
         pause, end = (V2_COMMA_PAUSE, V2_END_PAUSE) if v2 else (COMMA_PAUSE, END_PAUSE)
+        if seed is None and LANG == "he":
+            seed = SENTENCE_SEEDS.get(sentence)
         parts = []
         for i, chunk in enumerate(chunks or (v2_chunks(sentence) if v2 else comma_chunks(sentence))):
             torch.manual_seed(VOXCPM_SEED if seed is None else seed)
