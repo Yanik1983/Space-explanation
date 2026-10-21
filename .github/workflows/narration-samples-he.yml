@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [jupiter2, jupiter-reword]
+        group: [gases]
     steps:
       - uses: actions/checkout@v4
 
