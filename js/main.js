@@ -764,13 +764,56 @@ const milky = (() => {
     $('labels').appendChild(el);
     return el;
   };
-  // התמונה (ההפוכה, כדי שהזרועות ייגררו כמו אצלנו) על משטח שמסתובב עם הגלקסיה. הרקע השחור שלה לא מוסיף אור
-  const photo = new THREE.Mesh(
-    new THREE.PlaneGeometry(GAL_R * 2.5, GAL_R * 2.5),
-    new THREE.MeshBasicMaterial({ map: imageTexture(window.innerWidth <= 720 ? 'textures/sky/m101-1k.jpg' : 'textures/sky/m101.jpg'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+  // מבחוץ הגלקסיה בנויה משלושה חלקים שמסתובבים יחד:
+  // 1. התמונה עצמה (ההפוכה, כדי שהזרועות ייגררו כמו אצלנו) – משטח דק וחד באמצע הדיסק, שנותן את כל הפרטים הקטנים.
+  // 2. מאות אלפי נקודות אור שנלקחות מאותה תמונה (איפה שהיא בהירה – יותר נקודות, ובצבע שלה), ומפוזרות לגובה:
+  //    הן נותנות לגלקסיה עובי אמיתי, שנראה מכל זווית. מלמעלה הן חלשות (התמונה החדה עושה את העבודה), ומהצד חזקות.
+  // 3. הבליטה במרכז (בהמשך).
+  // uFace: כמה אנחנו מסתכלים על הגלקסיה מלמעלה (1) או מהצד (0)
+  const PHOTO_SRC = window.innerWidth <= 720 ? 'textures/sky/m101-1k.jpg' : 'textures/sky/m101.jpg';
+  const photoU = { uOpacity: { value: 0 }, uFace: { value: 1 } };
+  const PHOTO_SIDE = GAL_R * 2.5;
+  const photo = new THREE.Group();
+  const photoPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(PHOTO_SIDE, PHOTO_SIDE),
+    new THREE.MeshBasicMaterial({ map: imageTexture(PHOTO_SRC), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
   );
-  photo.rotation.x = -Math.PI / 2;
-  photo.frustumCulled = false;
+  photoPlane.rotation.x = -Math.PI / 2;
+  photoPlane.frustumCulled = false;
+  photo.add(photoPlane);
+  // הבליטה: ענן אור תפוח וחם במרכז, בצורת ביצה פחוסה. בכל פיקסל מחשבים כמה קרוב עובר קו הראייה למרכז הביצה,
+  // ולכן מכל זווית היא נראית תלת־ממדית – עגולה מלמעלה ופחוסה מהצד
+  const bulgeU = { uCam: { value: new THREE.Vector3() }, uOpacity: photoU.uOpacity, uFace: photoU.uFace };
+  const bulge = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 48, 24),
+    new THREE.ShaderMaterial({
+      uniforms: bulgeU,
+      vertexShader: `${LOGDEPTH_V[0]}
+        varying vec3 vPos;
+        void main() {
+          vPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          ${LOGDEPTH_V[1]}
+        }`,
+      fragmentShader: `${LOGDEPTH_F[0]}
+        uniform vec3 uCam; uniform float uOpacity; uniform float uFace;
+        varying vec3 vPos;
+        void main() {
+          ${LOGDEPTH_F[1]}
+          vec3 dir = normalize(vPos - uCam);
+          float b = dot(uCam, dir);
+          float d2 = max(0.0, dot(uCam, uCam) - b * b); // המרחק (בריבוע) של קו הראייה ממרכז הבליטה
+          float I = exp(-4.0 * d2) - exp(-4.0);
+          vec3 col = mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.93, 0.8), exp(-10.0 * d2));
+          gl_FragColor = vec4(col * max(I, 0.0) * 0.25 * (1.0 - 0.6 * uFace) * uOpacity, 1.0);
+          #include <colorspace_fragment>
+        }`,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    }),
+  );
+  bulge.scale.set(0.34 * GAL_R, 0.27 * GAL_R, 0.34 * GAL_R);
+  bulge.frustumCulled = false;
+  photo.add(bulge);
   photo.visible = false;
   holder.add(photo);
   disk.visible = core.visible = here.visible = false;
@@ -879,7 +922,64 @@ const milky = (() => {
   scene.add(skyDome);
 
   // הגלקסיה נבנית רק כשמגיעים לאחת התחנות שלה בפעם הראשונה
+  // הנקודות מהתמונה: הגרלה לפי הבהירות (יותר נקודות במקומות בהירים), וגובה אקראי לפי העובי של הגלקסיה באותו מרחק מהמרכז
+  const photoMat = pointsMaterial(false, true);
+  const photoPoints = new THREE.Points(new THREE.BufferGeometry(), photoMat);
+  photoPoints.frustumCulled = false;
+  photoPoints.renderOrder = 1;
+  photo.add(photoPoints);
+  function buildPhotoPoints(img) {
+    const W = 512;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = W;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, W, W);
+    const px = ctx.getImageData(0, 0, W, W).data;
+    const random = seeded(11);
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
+    const lin = (v) => ((v / 255) <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+    const n = window.innerWidth <= 720 || touchDevice ? 90000 : 220000;
+    const bag = { pos: [], col: [], size: [], phase: [], flare: [] };
+    for (let tries = 0; bag.size.length < n && tries < n * 60; tries++) {
+      const cx = random() * W, cy = random() * W;
+      const o = ((cy | 0) * W + (cx | 0)) * 4;
+      const r8 = px[o], g8 = px[o + 1], b8 = px[o + 2];
+      const lum = (0.3 * r8 + 0.55 * g8 + 0.15 * b8) / 255;
+      if (random() > Math.pow(lum, 1.4) * 2.2) continue;
+      // מיקום ביחידות של הגלקסיה: שורה 0 בתמונה היא הקצה העליון של המשטח, שנמצא ב־z שלילי (כמו התמונה)
+      const x = (cx / W - 0.5) * PHOTO_SIDE, z = (cy / W - 0.5) * PHOTO_SIDE;
+      const r = Math.hypot(x, z) / GAL_R;
+      // עובי: דיסק עבה, שמתעבה מאוד לכיוון המרכז
+      const th = (0.05 + 0.13 * Math.exp(-(r * r) / 0.05)) * GAL_R;
+      bag.pos.push(x, gauss() * th, z);
+      const k = (0.07 / Math.max(0.1, lum)) * (0.45 + 0.55 * Math.min(1, r / 0.3)); // במרכז הנקודות צפופות מאוד – כל אחת חלשה יותר
+      bag.col.push(lin(r8) * k, lin(g8) * k, lin(b8) * k);
+      bag.size.push(55 + random() * 55);
+      bag.phase.push(random());
+      bag.flare.push(0);
+    }
+    // הבליטה: ענן צפוף של כוכבים זקנים וצהבהבים בצורת ביצה פחוסה
+    const nb = n * 0.12;
+    for (let i = 0; i < nb; i++) {
+      const rr = Math.abs(gauss());
+      const u = random() * 2 - 1, phi = random() * Math.PI * 2, sn = Math.sqrt(1 - u * u);
+      bag.pos.push(sn * Math.cos(phi) * rr * 0.14 * GAL_R, u * rr * 0.1 * GAL_R, sn * Math.sin(phi) * rr * 0.14 * GAL_R);
+      const c = random();
+      bag.col.push(0.04, (0.72 + 0.2 * c) * 0.04, (0.42 + 0.3 * c) * 0.04);
+      bag.size.push(60 + random() * 70);
+      bag.phase.push(random());
+      bag.flare.push(0);
+    }
+    setGeo(photoPoints, bag);
+  }
+
   const load = () => {
+    if (GALAXY_PHOTO && !photoPoints.geometry.attributes.position) {
+      const img = new Image();
+      img.onload = () => buildPhotoPoints(img);
+      img.src = 'textures/sky/m101-1k.jpg';
+      photoPoints.geometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+    }
     if (disk.material.map) return;
     const phone = window.innerWidth <= 720;
     const gal = buildGalaxy({ n: phone ? 26000 : 60000, nd: phone ? 3500 : 8000, random: seeded(7) });
@@ -890,7 +990,7 @@ const milky = (() => {
     disk.material.map = paintHaze(gal);
     disk.material.needsUpdate = true;
   };
-  return { disk, core, photo, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
+  return { disk, core, photo, photoU, photoPlane, photoMat, bulge, bulgeU, here, holder, sunAnchor, starPoints, starsMat, dustPoints, dustMat, glowPoints, glowMat, skyDome, load, hereLabel: label(tt('☀️ אנחנו כאן', '☀️ We are here'), 'milky-here'), centreLabel: label(tt('מרכז הגלקסיה', 'Galactic center'), 'milky-centre') };
 })();
 
 const milkyTmp = new THREE.Vector3();
@@ -956,7 +1056,18 @@ function updateMilkyWay(dt) {
   }
   if (GALAXY_PHOTO) {
     // התמונה מרחוק, והכוכבים התלת־ממדיים מקרוב (בדרך פנימה): כל אחד נעלם כשהשני מופיע
-    milky.photo.material.opacity = milkyMix * out * (bloomOn ? 0.8 : 1);
+    const po = milkyMix * out * (bloomOn ? 0.8 : 1);
+    milky.photoU.uOpacity.value = po;
+    milky.photoPlane.material.opacity = po * 0.85;
+    const pm = milky.photoMat.uniforms;
+    pm.uOpacity.value = po * (0.14 + 0.3 * milky.photoU.uFace.value); // מהצד יש הרבה יותר נקודות בכל קו ראייה
+    pm.uTime.value = t;
+    pm.uScale.value = (renderer.domElement.height / 2) / Math.tan((camera.fov * DEG) / 2);
+    pm.uMaxPx.value = 3 * renderer.getPixelRatio();
+    pm.uNear.value = 0;
+    milky.bulge.updateMatrixWorld();
+    milky.bulge.worldToLocal(milky.bulgeU.uCam.value.copy(camera.position));
+    milky.photoU.uFace.value = Math.abs(milky.bulgeU.uCam.value.clone().multiply(milky.bulge.scale).normalize().y);
     milky.starsMat.uniforms.uOpacity.value = milkyMix * (1 - out);
   }
   // שכבת הזוהר השטוחה נראית טוב רק מרחוק; מקרוב (בדרך פנימה) היא נראית כמו ריבוע מטושטש
