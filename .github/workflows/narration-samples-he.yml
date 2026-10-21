@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [ellipse-split-p, ellipse-split-p-sing]
+        group: [jupiter2, jupiter-reword]
     steps:
       - uses: actions/checkout@v4
 
