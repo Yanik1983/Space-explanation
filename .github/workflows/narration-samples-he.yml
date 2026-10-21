@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [ellipse-takes, ellipse-latin, ellipse-latin-sing]
+        group: [ellipse-split, ellipse-split-sing]
     steps:
       - uses: actions/checkout@v4
 
