@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [spot, spot-takes]
+        group: [saturn, saturn-takes]
     steps:
       - uses: actions/checkout@v4
 
