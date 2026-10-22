@@ -87,6 +87,11 @@ export function heliocentric(id, days, out = new THREE.Vector3()) {
   return placeOnOrbit(el, solveKepler(el.L - el.peri, el.e), out);
 }
 
+// חצי הציר הארוך של המסלול (AU) – "הגודל" של האליפסה
+export function semiMajor(id, days) {
+  return elementsAt(id, days).a;
+}
+
 // נקודות לאורך כל המסלול (אליפסה) לפי האלמנטים בתאריך נתון
 export function orbitPoints(id, days, n = 360) {
   const el = elementsAt(id, days);

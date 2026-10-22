@@ -7,7 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { LANG, LOCALE, tt } from './i18n.js';
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY, GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION, MOONS, COMETS, COMETS_INFO } from './content.js';
-import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
+import { heliocentric, orbitPoints, semiMajor, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto, hiResPath, loadTexture } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './kid-presenter.js';
@@ -60,6 +60,12 @@ function displayRadius(au) {
 function toDisplay(v, out) {
   const r = v.length();
   return r ? out.copy(v).multiplyScalar(displayRadius(r) / r) : out.set(0, 0, 0);
+}
+
+// כוכבי לכת: כל המסלול מוקטן באותו יחס (לפי חצי הציר הארוך שלו), כך שהאליפסה שומרת על הצורה האמיתית –
+// השמש לא במרכז, וכוכב הלכת מתקרב ומתרחק ממנה (ומאיץ כשהוא קרוב). הדחיסה בשורש הייתה "מעגלת" את המסלולים.
+function toDisplayOrbit(v, a, out) {
+  return out.copy(v).multiplyScalar(displayRadius(a) / a);
 }
 
 // ---------- סצנה ----------
@@ -877,7 +883,7 @@ function initGalaxyMotion() {
 
   // הגז שבין הכוכבים: מגיע מהכיוון האמיתי שלו ונזרם מסביב לבועה של השמש (כמו מים סביב אבן), בלי להיכנס אליה
   {
-    const N = 800, pos = new Float32Array(N * 3);
+    const N = 450, pos = new Float32Array(N * 3);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     ismGas = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.5, map: dot, color: '#b9c8ff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false }));
@@ -889,7 +895,7 @@ function initGalaxyMotion() {
 
   // כוכבים קרובים: עומדים במקום בגלקסיה, ולכן כשמערכת השמש טסה הם זזים לאט לאחור – הקרובים מהר יותר מהרחוקים
   {
-    const N = 320, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+    const N = 140, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -926,7 +932,7 @@ function initGalaxyMotion() {
   scene.add(motionArrow);
   galaxyInfo.label = document.createElement('div');
   galaxyInfo.label.className = 'label motion-label';
-  galaxyInfo.label.textContent = tt('כיוון התנועה של מערכת השמש (לכיוון קבוצת הברבור)', 'The direction the Solar System is moving (toward Cygnus)');
+  galaxyInfo.label.textContent = tt('לכאן אנחנו טסים', 'Where we are heading');
   galaxyInfo.label.style.display = 'none';
   $('labels').appendChild(galaxyInfo.label);
   galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-44);
@@ -960,7 +966,7 @@ function updateGalaxyMotion(dt) {
     scene.add(centreArrow);
     centreLabel = document.createElement('div');
     centreLabel.className = 'label motion-label centre-label';
-    centreLabel.textContent = tt('לכיוון מרכז הגלקסיה (קבוצת הכוכבים קשת)', 'Toward the galactic center (Sagittarius)');
+    centreLabel.textContent = tt('למרכז הגלקסיה', 'To the galactic center');
     centreLabel.style.display = 'none';
     $('labels').appendChild(centreLabel);
   }
@@ -1000,7 +1006,7 @@ function updateGalaxyMotion(dt) {
     for (let k = 0; k <= TRAIL_POINTS; k++) {
       const tau = (k / TRAIL_POINTS) * days;
       if (t.body.isSun) motionTmp.set(0, 0, 0);
-      else toDisplay(heliocentric(t.body.data.id, simDays - tau, motionTmp), motionTmp);
+      else toDisplayOrbit(heliocentric(t.body.data.id, simDays - tau, motionTmp), t.body.semiA, motionTmp);
       motionTmp.addScaledVector(GALAXY_DIR, -GALAXY_SPEED * tau);
       attr.setXYZ(k, motionTmp.x, motionTmp.y, motionTmp.z);
     }
@@ -1022,7 +1028,7 @@ function updateGalaxyMotion(dt) {
       pa.setXYZ(i, motionTmp.x, motionTmp.y, motionTmp.z);
     });
     pa.needsUpdate = true;
-    nearStars.material.opacity = motionMix * 0.85;
+    nearStars.material.opacity = motionMix * 0.6;
   }
   // הגז זורם מסביב לבועה הבלתי נראית של השמש (ההליוספרה): נעצר מולה, ומאיץ בצדדים שלה
   updateIsmGas(dt);
@@ -1088,7 +1094,7 @@ function updateIsmGas(dt) {
     else pos.setXYZ(i, gasR.x, gasR.y, gasR.z);
   }
   pos.needsUpdate = true;
-  ismGas.material.opacity = motionMix * 0.45;
+  ismGas.material.opacity = motionMix * 0.22;
 }
 initGalaxyMotion();
 // בתחנה הזאת המצלמה מסתובבת לבד; ברגע שהמשתמש גורר או מסובב – היא עוצרת
@@ -1963,10 +1969,14 @@ function updateOrbits() {
   orbitsMix = scaleMix;
   for (const b of [...bodies, ...comets]) {
     if (!b.orbitLine) continue;
-    if (recompute && !b.isComet) b.orbitAU = orbitPoints(b.data.id, simDays, 360);
+    if (recompute && !b.isComet) {
+      b.orbitAU = orbitPoints(b.data.id, simDays, 360);
+      b.semiA = semiMajor(b.data.id, simDays);
+    }
     const attr = b.orbitLine.geometry.attributes.position;
     b.orbitAU.forEach((p, i) => {
-      toDisplay(p, tmp);
+      if (b.isComet) toDisplay(p, tmp);
+      else toDisplayOrbit(p, b.semiA, tmp);
       attr.setXYZ(i, tmp.x, tmp.y, tmp.z);
     });
     attr.needsUpdate = true;
@@ -2112,7 +2122,8 @@ function updateBodies(dt) {
     const d = b.data;
     if (!b.isSun) {
       heliocentric(d.id, simDays, b.au);
-      toDisplay(b.au, b.group.position);
+      b.semiA ??= semiMajor(d.id, simDays);
+      toDisplayOrbit(b.au, b.semiA, b.group.position);
     }
     b.group.scale.setScalar(1 + ((b.isSun ? REAL_SIZE.sun : REAL_SIZE.planet) - 1) * scaleMix);
     if (timeRuns()) {
@@ -2290,12 +2301,13 @@ function updateViewOffset(dt) {
 
 // ---------- תוויות על המסך ----------
 // סדר עדיפות לתוויות: הכוכב שנבחר, השמש, ואז מהגדול לקטן. תווית שמתנגשת באחרת מוסתרת.
-const labelOrder = () => [...(milkyMix > 0.3 ? [] : bodies), ...(motionMix > 0.3 || milkyMix > 0.3 ? [] : comets)].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
+// בטיסה בחלל רק השמש וכדור הארץ מקבלים תווית, כדי שהשבילים לא יוסתרו בשמות
+const labelOrder = () => [...(milkyMix > 0.3 ? [] : motionMix > 0.3 ? bodies.filter((b) => b.isSun || b.data.id === 'earth') : bodies), ...(motionMix > 0.3 || milkyMix > 0.3 ? [] : comets)].sort((a, b) => (b === selected) - (a === selected) || b.data.size - a.data.size);
 
 function updateLabels() {
   const w = window.innerWidth, h = window.innerHeight;
   const placed = [];
-  if (milkyMix > 0.3) for (const b of [...bodies, ...comets]) b.label.style.display = 'none';
+  if (milkyMix > 0.3 || motionMix > 0.3) for (const b of [...bodies, ...comets]) b.label.style.display = 'none';
   for (const b of labelOrder()) {
     tmp.copy(b.group.position).project(camera);
     if (tmp.z > 1) {
