@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [asteroids, asteroids-takes]
+        group: [ceres-takes, ceres-words]
     steps:
       - uses: actions/checkout@v4
 
