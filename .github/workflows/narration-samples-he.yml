@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [mars2, mars2-takes]
+        group: [asteroids, asteroids-takes]
     steps:
       - uses: actions/checkout@v4
 
