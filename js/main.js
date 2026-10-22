@@ -801,7 +801,7 @@ function stepFade(key, target, up, down, dt) {
   return p * p * (3 - 2 * p);
 }
 let trails = [], dust = null, motionArrow = null, sunTail = null;
-let helio = null, ismGas = null, nearStars = null, voyagers = [], centreArrow = null, centreLabel = null, speedBtn = null, motionCamFree = false;
+let ismGas = null, nearStars = null, voyagers = [], centreArrow = null, centreLabel = null, speedBtn = null, motionCamFree = false;
 
 function softDot() {
   const c = document.createElement('canvas');
@@ -861,56 +861,6 @@ function initGalaxyMotion() {
   });
   scene.add(dust);
 
-  // ההליוספרה: הבועה שהרוח של השמש מנפחת בתוך הגז שבין הכוכבים. מלפנים (מול הגז שמגיע) היא בערך 120 יחידות אסטרונומיות
-  // מהשמש, ומאחור היא נמתחת לזנב ארוך, כמו שביט. בפנים יש עוד קליפה חלשה: "גל ההלם", שבו הרוח של השמש מאטה פתאום
-  const helioShell = (au, tail, color, strength) => {
-    const geo = new THREE.SphereGeometry(1, 96, 64);
-    const pa = geo.attributes.position, v = new THREE.Vector3();
-    for (let i = 0; i < pa.count; i++) {
-      v.fromBufferAttribute(pa, i);
-      const c = v.dot(ISM_FROM);
-      const k = c >= 0 ? 1 - 0.12 * c : 1 + tail * Math.pow(-c, 1.6);
-      pa.setXYZ(i, v.x * k, v.y * k, v.z * k);
-    }
-    geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
-      uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: 0 }, uStrength: { value: strength }, uTime: sunUniforms.uTime },
-      vertexShader: `${LOGDEPTH_V[0]}
-        varying vec3 vN; varying vec3 vV; varying vec3 vO;
-        void main() {
-          vO = position;
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          vN = normalize(normalMatrix * normal);
-          vV = -mv.xyz;
-          gl_Position = projectionMatrix * mv;
-          ${LOGDEPTH_V[1]}
-        }`,
-      fragmentShader: `${LOGDEPTH_F[0]}
-        uniform vec3 uColor; uniform float uOpacity; uniform float uStrength; uniform float uTime;
-        varying vec3 vN; varying vec3 vV; varying vec3 vO;
-        float h(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-        float n3(vec3 x) {
-          vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
-          return mix(mix(mix(h(i), h(i + vec3(1, 0, 0)), f.x), mix(h(i + vec3(0, 1, 0)), h(i + vec3(1, 1, 0)), f.x), f.y),
-                     mix(mix(h(i + vec3(0, 0, 1)), h(i + vec3(1, 0, 1)), f.x), mix(h(i + vec3(0, 1, 1)), h(i + vec3(1, 1, 1)), f.x), f.y), f.z);
-        }
-        void main() {
-          ${LOGDEPTH_F[1]}
-          // הקצוות של הבועה בהירים יותר (שם מסתכלים דרך הרבה מהקליפה), והפנים כמעט שקופים; עננים עדינים זורמים עליה
-          float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.5);
-          float flow = 0.65 + 0.35 * n3(normalize(vO) * 4.0 + vec3(uTime * 0.05, 0.0, -uTime * 0.04));
-          gl_FragColor = vec4(uColor * (0.015 + rim) * flow * uStrength * uOpacity, 1.0);
-          #include <colorspace_fragment>
-        }`,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    }));
-    mesh.userData.au = au;
-    mesh.frustumCulled = false;
-    mesh.visible = false;
-    scene.add(mesh);
-    return mesh;
-  };
-  helio = { pause: helioShell(120, 1.5, '#6fd2ff', 0.2), shock: helioShell(90, 0.9, '#ffb36b', 0.06) };
 
   // החלליות וויאג'ר 1 ו־2 – היחידות שכבר יצאו מהבועה (ב־2012 וב־2018). מקום ומרחק בערך נכונים לשנת 2026
   for (const [name, ra, dec, au] of [[tt("וויאג'ר 1", 'Voyager 1'), 258.3, 12.1, 169], [tt("וויאג'ר 2", 'Voyager 2'), 302.8, -59.6, 142]]) {
@@ -993,7 +943,7 @@ function updateGalaxyMotion(dt) {
   for (const t of trails) t.line.visible = t.glow.visible = on;
   motionArrow.visible = on;
   dust.visible = false; // הוחלף בגז שזורם מסביב לבועה של השמש (ismGas)
-  helio.pause.visible = helio.shock.visible = ismGas.visible = nearStars.visible = on;
+  ismGas.visible = nearStars.visible = on;
   for (const v of voyagers) v.dot.visible = on;
   // מעבר רך בין המהירות המואטת לאמיתית
   realSpeedK += ((realSpeedOn ? 1 : 0) - realSpeedK) * Math.min(1, dt * 1.2);
@@ -1074,12 +1024,7 @@ function updateGalaxyMotion(dt) {
     pa.needsUpdate = true;
     nearStars.material.opacity = motionMix * 0.85;
   }
-  // הבועה של השמש, בגודל לפי המרחקים בתצוגה
-  for (const shell of [helio.pause, helio.shock]) {
-    shell.scale.setScalar(displayRadius(shell.userData.au));
-    shell.material.uniforms.uOpacity.value = motionMix;
-  }
-  // הגז זורם מסביב לבועה. המהירות לפי זרימה סביב כדור: נעצר מול הבועה, ומאיץ בצדדים שלה
+  // הגז זורם מסביב לבועה הבלתי נראית של השמש (ההליוספרה): נעצר מולה, ומאיץ בצדדים שלה
   updateIsmGas(dt);
   for (const v of voyagers) {
     toDisplay(motionTmp.copy(v.dir).multiplyScalar(v.au), v.dot.position);
@@ -2216,8 +2161,8 @@ function flyTo(body, duration = null, pose = null) {
   } else if (body.isGalaxy) {
     // מבט מהצד על השבילים: מאונך לכיוון התנועה
     const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
-    // רחוק מספיק כדי לראות גם את הבועה של השמש (ההליוספרה) ואת החלליות וויאג'ר
-    offset = side.multiplyScalar(-760).add(new THREE.Vector3(0, 220, 0)).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
+    // רחוק מספיק כדי לראות גם את החלליות וויאג'ר, אבל קרוב מספיק לשבילים של כוכבי הלכת
+    offset = side.multiplyScalar(-460).add(new THREE.Vector3(0, 110, 0)).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
   } else if (body.isBlackHole) {
     // מהצד של השמש, קצת מעל טבעת הגז – כמו הצילום המפורסם מהסרט
     const z = GAL_CENTRE_DIR.clone().negate();
