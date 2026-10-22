@@ -59,15 +59,21 @@ export function loadDetailed(ids, onReady) {
 const loader = new THREE.TextureLoader();
 
 // מפות אמיתיות: map = צבע, bump = מפת גובה (הרים ומכתשים)
+// כוכבי הלכת: מפות של Solar System Scope (CC BY 4.0, מבוססות על צילומי נאס"א), ב־2048×1024 לכולם.
+// כשמתקרבים לכוכב לכת במחשב נטענת גרסה מפורטת פי 2 (hiResPath). לנוגה – שכבת העננים העליונה, כמו שהוא נראה באמת
 const PHOTOS = {
   sun: { map: 'sun_1024.jpg' },
-  mercury: { map: 'mercury_1024.jpg', bump: 'mercury_bump_1024.jpg' },
-  mars: { map: 'mars_1024.jpg', bump: 'mars_bump_1024.jpg' },
-  jupiter: { map: 'jupiter_1024.jpg' },
-  saturn: { map: 'saturn_1024.jpg' },
-  uranus: { map: 'uranus_1024.jpg' },
-  neptune: { map: 'neptune_1024.jpg' },
+  mercury: { map: 'planets/mercury-2k.jpg', bump: 'mercury_bump_1024.jpg' },
+  venus: { map: 'planets/venus-2k.jpg' },
+  mars: { map: 'planets/mars-2k.jpg', bump: 'mars_bump_1024.jpg' },
+  jupiter: { map: 'planets/jupiter-2k.jpg' },
+  saturn: { map: 'planets/saturn-2k.jpg' },
+  uranus: { map: 'planets/uranus-2k.jpg' },
+  neptune: { map: 'planets/neptune-2k.jpg' },
 };
+const HI_RES = ['mercury', 'venus', 'mars', 'jupiter', 'saturn'];
+export const hiResPath = (id) => (HI_RES.includes(id) ? `textures/planets/${id}-4k.jpg` : null);
+export { loadTexture };
 export const PHOTO_IDS = Object.keys(PHOTOS);
 
 function loadTexture(path, srgb) {
@@ -75,6 +81,7 @@ function loadTexture(path, srgb) {
     loader.load(path, (tex) => {
       if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 8;
+      tex.wrapS = THREE.RepeatWrapping; // מפה של כדור: הקצה הימני ממשיך את השמאלי (חשוב לפסים שזורמים)
       resolve(tex);
     }, undefined, reject);
   });

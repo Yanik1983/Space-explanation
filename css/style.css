@@ -37,6 +37,14 @@ html, body {
   display: block;
   touch-action: none;
 }
+/* "עדשה": השוליים של התמונה כהים מעט, כמו בצילום במצלמה – מושך את העין למרכז */
+#scene::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.42) 100%);
+}
 
 /* ---------- כפתורים ---------- */
 .btn {

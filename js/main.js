@@ -7,7 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { LANG, LOCALE, tt } from './i18n.js';
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY, GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION, MOONS, COMETS, COMETS_INFO } from './content.js';
 import { heliocentric, orbitPoints, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
-import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto } from './textures.js';
+import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto, hiResPath, loadTexture } from './textures.js';
 import { Narrator, splitSentences, DEFAULT_SETTINGS } from './speech.js';
 import { Presenter } from './kid-presenter.js';
 import { GAL_R, GAL_SUN_R, buildGalaxy, seeded } from './galaxy.js';
@@ -24,10 +24,20 @@ const UP = new THREE.Vector3(0, 1, 0);
 const sunView = { value: new THREE.Vector3() };
 // הזמן של האנימציה על פני השמש, וכמה להבהיר אותה כשיש זוהר (bloom)
 const sunUniforms = { uTime: { value: 0 }, uBoost: { value: 1 } };
-const sunErupt = { uE: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] } };
+// הצבע והעוצמה של האטמוספירה של כל כוכב לכת (לכוכב חמה ולפלוטו כמעט אין אטמוספירה – ולכן אין להם)
+const ATMOSPHERES = {
+  venus: ['#f3e2b2', 0.6], earth: ['#9ccaff', 0.55], mars: ['#e2a47e', 0.28], jupiter: ['#d9e6ff', 0.3],
+  saturn: ['#eedcb0', 0.28], uranus: ['#c4f0f2', 0.45], neptune: ['#86a2ff', 0.5],
+};
+// בהירות ומהירות זרימת הפסים לכל כוכב לכת
+const LOOK_K = { mercury: 0.8, venus: 0.95, earth: 1.05, mars: 0.85, jupiter: 0.6, saturn: 0.72, uranus: 1.0, neptune: 1.2, pluto: 0.9 };
+const FLOW = { jupiter: [0.012, 0.0005], saturn: [0.009, 0.00035], uranus: [0.005, 0.00015], neptune: [0.008, 0.0003] };
+// uRight/uUp/uFwd: הצירים של המצלמה בתוך השמש (במערכת שמסתובבת איתה), כדי שהלהבות וההתפרצויות יהיו מקומות על השמש עצמה
+// ולא "מודבקות" למסך: כשמסובבים את המבט או כשהשמש מסתובבת, הן זזות איתה. uEd: הכיוון של כל התפרצות על השמש
+const sunErupt = { uE: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] }, uEd: { value: [new THREE.Vector3(1, 0, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(1, 0, 0)] }, uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uFwd: { value: new THREE.Vector3(0, 0, 1) } };
 const LOGDEPTH_V = ['#include <common>\n#include <logdepthbuf_pars_vertex>', '#include <logdepthbuf_vertex>'];
 const LOGDEPTH_F = ['#include <common>\n#include <logdepthbuf_pars_fragment>', '#include <logdepthbuf_fragment>'];
-const moonImage = imageTexture('textures/moon_1024.jpg');
+const moonImage = imageTexture('textures/planets/moon-2k.jpg');
 
 let simDays = (Date.now() - J2000) / DAY_MS; // ימים מאז 1.1.2000 בצהריים
 
@@ -118,7 +128,8 @@ function checkBloomOutput() {
   bloomCheck.brightest = brightest;
 }
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.28));
+// אור כללי חלש: הצד של הלילה כמעט חשוך, כמו בצילומים (קצת אור, כדי שילדים עדיין יראו את הכדור)
+scene.add(new THREE.AmbientLight(0xffffff, 0.07));
 const sunLight = new THREE.PointLight(0xfff4e0, 3, 0, 0);
 scene.add(sunLight);
 
@@ -133,7 +144,7 @@ const comets = COMETS.map(createComet);
 
 // טקסטורות מפורטות נוצרות ברקע ומחליפות את הגרסה הקטנה, כוכב אחרי כוכב
 // נוגה ופלוטו מחושבים; לשמש ולשאר יש מפות אמיתיות (ואם תמונה לא נטענת – מחשבים גם אותה)
-loadDetailed(['venus', 'pluto'], applyDetailed);
+loadDetailed(['pluto'], applyDetailed);
 loadPhotos(applyDetailed, (id) => loadDetailed([id], applyDetailed));
 function applyDetailed(id, map, bump) {
   const mat = bodyById[id]?.mesh.material;
@@ -155,7 +166,7 @@ function applyDetailed(id, map, bump) {
 // ---------- חגורת האסטרואידים ----------
 // "גוף" מיוחד: אין לו כדור, רק נקודה במרכז החגורה שהמצלמה טסה אליה
 const belt = { data: ASTEROID_BELT, group: new THREE.Object3D(), isBelt: true, moons: [], au: new THREE.Vector3(0, 0, 2.75) };
-const asteroids = makeAsteroids(window.innerWidth <= 720 ? 1600 : 2600);
+const asteroids = makeAsteroids(2600);
 const asteroidPoints = (() => {
   const pos = new Float32Array(asteroids.length * 3);
   const col = new Float32Array(asteroids.length * 3);
@@ -197,6 +208,108 @@ function updateAsteroids() {
 
 // ---------- חומרים מיוחדים ----------
 
+// ---------- מראה "מצולם" לכוכבי הלכת ----------
+// שלושה דברים שגורמים לכוכב לכת להיראות כמו בצילום ולא כמו כדור צבוע:
+// 1. גבול רך בין יום ללילה: האור "עוטף" קצת מעבר לקו, ונכנס לחושך בעדינות (כמו דמדומים), ולא נחתך בקו חד.
+// 2. דחיסת בהירות כמו במצלמה (tone mapping מסוג ACES): צבעים חזקים לא "נשרפים", ובמקומות הכי בהירים הצבע מתבהר
+//    לאט לכיוון לבן – כמו בצילום אמיתי. רק לכוכבי הלכת: השמש, הגלקסיה והאפקטים מכוילים בנפרד.
+// 3. בכוכבי הגז: הפסים זורמים לאט – כל פס בכיוון אחר, עם מערבולות עדינות.
+const LOOK = { uExposure: { value: 0.6 } };
+const LOOK_GLSL = `
+  uniform float uExposure; uniform float uLookK; uniform float uFlow; uniform float uShear; uniform float uLookTime;
+  float softNL(float x) { float t = clamp((x + 0.22) / 1.22, 0.0, 1.0); return t * smoothstep(0.0, 0.42, t); }
+  vec3 lookTone(vec3 c) {
+    // לפני הדחיסה: ערוץ צבע אחד שבורח למעלה (למשל אדום בצד המואר של מאדים) מתמזג קצת עם הבהירות, כדי שלא "ייחתך"
+    float peak = max(c.r, max(c.g, c.b));
+    float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float spread = peak > 1e-4 ? (peak - min(c.r, min(c.g, c.b))) / peak : 0.0;
+    c = mix(c, vec3(luma), 0.6 * smoothstep(0.75, 2.4, peak) * spread);
+    c *= 1.6;
+    c = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0);
+    // קצת יותר רוויה (הדחיסה מחווירה מעט את הצבעים)
+    return clamp(mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 1.1), 0.0, 1.0);
+  }
+  float lookNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453), b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+    float c2 = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453), d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+    return mix(mix(a, b, f.x), mix(c2, d, f.x), f.y);
+  }`;
+const DOT_NL = 'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );';
+function photoLook(mat, { k = 1, flow = 0, shear = 0 } = {}) {
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (sh, renderer) => {
+    prev?.call(mat, sh, renderer);
+    Object.assign(sh.uniforms, { uExposure: LOOK.uExposure, uLookK: { value: k }, uFlow: { value: flow }, uShear: { value: shear }, uLookTime: sunUniforms.uTime });
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\n${LOOK_GLSL}`)
+      .replace('#include <lights_physical_pars_fragment>', THREE.ShaderChunk.lights_physical_pars_fragment.replace(DOT_NL, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );'))
+      .replace('#include <lights_phong_pars_fragment>', THREE.ShaderChunk.lights_phong_pars_fragment.replace(DOT_NL, 'float dotNL = softNL( dot( geometryNormal, directLight.direction ) );'))
+      .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = lookTone(gl_FragColor.rgb * uExposure * uLookK);\n#include <tonemapping_fragment>');
+    if (flow) {
+      // פסים שזורמים: כל רוחב גאוגרפי זז בקצב קצת אחר (sin), ועוד עיוות רך של רעש שמשתנה לאט
+      sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `
+        #ifdef USE_MAP
+          vec2 fuv = vMapUv;
+          fuv.x += sin(fuv.y * 22.0) * uShear * uLookTime;
+          float w1 = lookNoise(fuv * vec2(5.0, 11.0) + uLookTime * 0.03), w2 = lookNoise(fuv * vec2(9.0, 19.0) - uLookTime * 0.025);
+          fuv += (vec2(1.0, 0.35) * (0.6 * w1 + 0.4 * w2 - 0.5)) * uFlow;
+          diffuseColor *= texture2D( map, fuv );
+        #endif`);
+    }
+  };
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|look${flow ? '-flow' : ''}`;
+  return mat;
+}
+
+// אטמוספירה: קליפה שקופה סביב כוכב הלכת. לכל פיקסל מחשבים באיזה גובה קו הראייה עובר הכי קרוב לכוכב:
+// קרוב לפני השטח – זוהר חזק, ובקצה – דק ובהיר; ורחוק יותר – נעלם. רק בצד המואר (כמו האוויר שמפזר את אור השמש)
+function atmoShell(radius, color, strength) {
+  const R1 = 1.12;
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius * R1, 64, 32),
+    new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(color) }, uStrength: { value: strength }, uSunView: sunView, uR: { value: radius } },
+      vertexShader: `${LOGDEPTH_V[0]}
+        varying vec3 vP; varying vec3 vC; varying float vS;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vP = mv.xyz;
+          vC = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          vS = length(modelViewMatrix[0].xyz);
+          gl_Position = projectionMatrix * mv;
+          ${LOGDEPTH_V[1]}
+        }`,
+      fragmentShader: `${LOGDEPTH_F[0]}
+        uniform vec3 uColor; uniform float uStrength; uniform vec3 uSunView; uniform float uR;
+        varying vec3 vP; varying vec3 vC; varying float vS;
+        void main() {
+          ${LOGDEPTH_F[1]}
+          vec3 D = normalize(vP);
+          float along = dot(vC, D);
+          vec3 closest = D * along;
+          float b = length(vC - closest);
+          float r0 = uR * vS, r1 = uR * ${R1.toFixed(2)} * vS;
+          float x = (b - r0) / (r1 - r0);
+          if (along < 0.0) discard;
+          // מעל הכוכב עצמו (קו הראייה פוגע בו): האוויר נראה רק ליד השוליים, שם מסתכלים דרך שכבה עבה שלו
+          float inner = x < 0.0 ? exp(-5.0 * (1.0 - b / r0)) * 0.9 : 1.0;
+          x = max(x, 0.0);
+          float haze = exp(-2.8 * x) * inner, edge = exp(-12.0 * x) * inner;
+          float cut = 1.0 - smoothstep(0.6, 1.0, x);
+          vec3 n = normalize(closest - vC);
+          float lit = smoothstep(-0.25, 0.4, dot(n, normalize(uSunView - closest)));
+          float a = (0.55 * haze + 0.8 * edge) * cut * lit * uStrength;
+          gl_FragColor = vec4((uColor + 0.5 * edge) * a, 1.0);
+          #include <colorspace_fragment>
+        }`,
+      blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+    }),
+  );
+  return mesh;
+}
+
 // השמש: הקצוות כהים יותר מהמרכז, כמו במציאות (limb darkening)
 function sunMaterial(map) {
   return new THREE.ShaderMaterial({
@@ -223,6 +336,27 @@ function sunMaterial(map) {
                    mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x), mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
       }
       float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * noise(p); p *= 2.03; a *= 0.5; } return s; }
+      vec3 hash3(vec3 p) { return fract(sin(vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)))) * 43758.5453); }
+      // תאים (Worley): מחזיר את המרחק לנקודה הקרובה ולשנייה הכי קרובה. ההפרש קטן ליד הגבול בין שני תאים
+      vec2 worley(vec3 p) {
+        vec3 i = floor(p), f = fract(p);
+        float d1 = 8.0, d2 = 8.0;
+        // בטלפון בודקים רק 8 תאים (בצד שאליו הנקודה קרובה) במקום 27 – כמעט אותו מראה, פי 3 פחות חישוב
+        #ifdef SUN_LITE
+        vec3 s0 = step(0.5, f) - 1.0;
+        for (int z = 0; z <= 1; z++) for (int y = 0; y <= 1; y++) for (int x = 0; x <= 1; x++) {
+          vec3 g = s0 + vec3(float(x), float(y), float(z));
+        #else
+        for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+          vec3 g = vec3(float(x), float(y), float(z));
+        #endif
+          vec3 o = hash3(i + g);
+          o = 0.5 + 0.42 * sin(uTime * 0.12 + 6.2831 * o); // כל תא "רותח" לאט
+          float d = length(g + o - f);
+          if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+        }
+        return vec2(d1, d2);
+      }
       void main() {
         ${LOGDEPTH_F[1]}
         float mu = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
@@ -230,7 +364,18 @@ function sunMaterial(map) {
         // גרעיניות שזזה לאט (גזים חמים שעולים ויורדים) וכתמים גדולים שמשתנים
         float gran = fbm(n * 22.0 + vec3(0.0, uTime * 0.06, uTime * 0.04));
         float cells = fbm(n * 5.0 - vec3(uTime * 0.015));
+        // הגרגירים של השמש: תאים בהירים של גז חם שעולה, עם "סדקים" כהים צרים ביניהם, שבהם הגז מתקרר ויורד.
+        // העיוות הקטן (warp) הופך את התאים ללא סדירים – בלי זה הם נראים כמו אדמה סדוקה
+        vec3 q = n * 24.0 + (vec3(gran, cells, fbm(n * 9.0 + 3.1)) - 0.5) * 1.6;
+        vec2 w = worley(q);
+        float lanes = smoothstep(0.0, 0.42, w.y - w.x);
+        // חוטי אש דקים: רעש "מקופל" (ridged) שזורם, כמו הפלזמה שנעה על פני השמש
+        float r1 = 1.0 - abs(2.0 * noise(n * 7.0 + vec3(uTime * 0.05, 0.0, uTime * 0.03)) - 1.0);
+        float r2 = 1.0 - abs(2.0 * noise(n * 14.5 - vec3(0.0, uTime * 0.07, 0.0)) - 1.0);
+        float fire = pow(0.6 * r1 + 0.4 * r2, 3.0);
         vec3 c = texture2D(map, vUv).rgb * (0.72 + 0.42 * gran + 0.2 * cells);
+        c *= 0.55 + 0.55 * lanes;
+        c *= 1.0 + fire * vec3(0.45, 0.3, 0.12);
         // השוליים כהים ואדמדמים יותר מהמרכז (limb darkening)
         c *= (0.45 + 0.65 * pow(mu, 0.5)) * mix(vec3(1.0, 0.6, 0.35), vec3(1.0), pow(mu, 0.35));
         gl_FragColor = vec4(c * uBoost, 1.0);
@@ -255,28 +400,36 @@ function sunFlareMaterial() {
         ${LOGDEPTH_V[1]}
       }`,
     fragmentShader: `${LOGDEPTH_F[0]}
-      uniform float uTime; uniform float uBoost; uniform vec4 uE[3];
+      uniform float uTime; uniform float uBoost; uniform vec4 uE[3]; uniform vec3 uEd[3];
+      uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd;
       varying vec2 vP;
       float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
       float n1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(i), h1(i + 1.0), f); }
-      // רעש שחוזר על עצמו כל K יחידות (K שלם), כדי שלא יהיה "תפר" בזווית ±π, שבו הלהבות נחתכות בקו ישר
-      float np(float x, float K) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(mod(i, K)), h1(mod(i + 1.0, K)), f); }
+      float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      float n3(vec3 x) {
+        vec3 i = floor(x), f = fract(x);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h3(i), h3(i + vec3(1, 0, 0)), f.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), f.x), f.y),
+                   mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+      }
       void main() {
         ${LOGDEPTH_F[1]}
         float r = length(vP);
         if (r < 0.995) discard;
         float a = atan(vP.y, vP.x);
         float d = r - 1.0;
-        float u = a / 6.2831853 + 0.5;
+        // הנקודה על השפה של השמש שמתחת לפיקסל הזה, ככיוון תלת־ממדי על השמש עצמה: הלהבות "שייכות" למקום על השמש
+        vec3 dir = normalize(uRight * cos(a) + uUp * sin(a));
+        vec3 tt = vec3(uTime * 0.25, -uTime * 0.2, uTime * 0.15);
         // לשונות אש: שלושה גדלים של רעש (גדולות, בינוניות ודקות), שכל אחד זז בקצב אחר
-        float big = np(u * 12.0 + uTime * 0.25, 12.0);
-        float mid = np(u * 30.0 - uTime * 0.6, 30.0);
-        float fine = np(u * 84.0 + uTime * 1.3, 84.0);
-        float tongue = pow(clamp(0.55 * big + 0.3 * mid + 0.15 * fine, 0.0, 1.0), 1.5) * (0.35 + 0.65 * np(u * 7.0 - uTime * 0.3, 7.0));
+        float big = n3(dir * 2.0 + tt);
+        float mid = n3(dir * 4.8 - tt * 2.4);
+        float fine = n3(dir * 13.4 + tt * 5.2);
+        float tongue = pow(clamp(0.55 * big + 0.3 * mid + 0.15 * fine, 0.0, 1.0), 1.5) * (0.35 + 0.65 * n3(dir * 1.1 - tt * 1.2));
         float h = 0.05 + 0.7 * tongue;
         float v = clamp(1.0 - d / h, 0.0, 1.0);
         // סיבים לאורך הלהבה (דקים וזזים כלפי מעלה), כדי שכל לשון תיראה מורכבת משלהבות קטנות
-        float fil = 0.45 + 0.55 * np(u * 140.0 + d * 12.0 - uTime * 1.6, 140.0);
+        float fil = 0.45 + 0.55 * n3(dir * 22.0 + vec3(0.0, d * 12.0 - uTime * 1.6, 0.0));
         float I = pow(v, 1.25) * fil * 1.7;
         vec3 col = mix(vec3(1.0, 0.36, 0.06), vec3(1.0, 0.95, 0.7), pow(v, 1.4));
         I += 0.5 * exp(-d * 14.0);
@@ -285,15 +438,20 @@ function sunFlareMaterial() {
           vec4 e = uE[i];
           if (e.w < 0.5) continue;
           float p = e.y;
-          float da = a - e.x; da = atan(sin(da), cos(da));
-          float fade = smoothstep(0.0, 0.08, p) * (1.0 - smoothstep(0.5, 0.95, p));
+          // ההתפרצות יושבת במקום קבוע על השמש: רואים אותה רק כשהמקום הזה בשפה (לא מלפנים ולא מאחור)
+          vec3 D = uEd[i];
+          float ea = atan(dot(D, uUp), dot(D, uRight));
+          float vis = 1.0 - smoothstep(0.35, 0.8, abs(dot(D, uFwd)));
+          if (vis < 0.01) continue;
+          float da = a - ea; da = atan(sin(da), cos(da));
+          float fade = smoothstep(0.0, 0.08, p) * (1.0 - smoothstep(0.5, 0.95, p)) * vis;
           if (abs(da) < e.z) {
             float uu = da / e.z;
             float rise = smoothstep(0.0, 0.5, p);
             float shape = pow(cos(uu * 1.5707963), 0.85);
             for (int k = 0; k < 7; k++) {
               float fk = float(k);
-              float s = 0.42 + 0.58 * h1(fk * 3.7 + e.x * 5.0);
+              float s = 0.42 + 0.58 * h1(fk * 3.7 + e.z * 50.0);
               float wob = 0.02 * (n1(uu * 6.0 + fk * 5.0 + uTime * 0.9) - 0.5) * 2.0 * rise;
               float Hs = e.w * s * rise * shape + wob;
               float th = 0.006 + 0.01 * (1.0 - abs(uu)) + 0.004 * h1(fk * 1.9);
@@ -311,13 +469,13 @@ function sunFlareMaterial() {
           }
           if (p > 0.25) {
             float q = p - 0.25;
-            vec2 c = (1.0 + e.w * (0.55 + 2.4 * q)) * vec2(cos(e.x), sin(e.x));
+            vec2 c = (1.0 + e.w * (0.55 + 2.4 * q)) * vec2(cos(ea), sin(ea));
             float rad = 0.16 + 0.55 * q;
             vec2 w = vP - c;
             float cloud = exp(-dot(w, w) / (rad * rad));
             // הענן הנפלט נראה מקושקש ולא כדור חלק
             cloud *= 0.6 + 0.4 * n1(atan(w.y, w.x) * 3.0 + length(w) * 18.0 - uTime * 2.0);
-            I += 0.6 * cloud * (1.0 - smoothstep(0.35, 0.8, q * 1.33)) * smoothstep(0.0, 0.1, q);
+            I += 0.6 * cloud * (1.0 - smoothstep(0.35, 0.8, q * 1.33)) * smoothstep(0.0, 0.1, q) * vis;
           }
         }
         gl_FragColor = vec4(col * uBoost, clamp(I, 0.0, 1.0) * smoothstep(3.1, 2.2, r));
@@ -422,13 +580,13 @@ function atmosphere(radius, color, strength) {
 // כדור הארץ: צילומי לוויין, אוקיינוסים מבריקים, הרים בתבליט, ואורות ערים רק בצד של הלילה
 function earthMaterial() {
   const mat = new THREE.MeshPhongMaterial({
-    map: imageTexture('textures/earth_atmos_2048.jpg'),
+    map: imageTexture('textures/planets/earth-2k.jpg'),
     specularMap: imageTexture('textures/earth_specular_2048.jpg', false),
     specular: new THREE.Color(0x3a3a3a),
     shininess: 18,
     normalMap: imageTexture('textures/earth_normal_2048.jpg', false),
     normalScale: new THREE.Vector2(0.8, 0.8),
-    emissiveMap: imageTexture('textures/earth_lights_2048.jpg'),
+    emissiveMap: imageTexture('textures/planets/earth-night-2k.jpg'),
     emissive: new THREE.Color(0xffd29a),
     emissiveIntensity: 1.3,
   });
@@ -647,7 +805,10 @@ function updateGalaxyMotion(dt) {
   dust.visible = motionArrow.visible = on;
 
   // פחות עומס: קווי המסלולים, האסטרואידים והשביטים נעלמים בהדרגה
-  for (const b of bodies) if (b.orbitLine && b !== selected) b.orbitLine.material.opacity = (b.highlight ? 0.95 : 0.3) * (1 - motionMix) * (1 - milkyMix);
+  // ומקרוב, כשמסתכלים על כוכב לכת אחד, הקווים כמעט נעלמים – כדי שלא יחצו את הכוכב כמו בציור
+  const fb = followBody?.orbitLine && bodies.includes(followBody) ? followBody : null;
+  const lineK = fb ? 0.12 + 0.88 * THREE.MathUtils.smoothstep(camera.position.distanceTo(fb.group.position), sizeOf(fb) * 5, sizeOf(fb) * 14) : 1;
+  for (const b of bodies) if (b.orbitLine) b.orbitLine.material.opacity = (b === selected ? 0.85 : b.highlight ? 0.95 : 0.3) * lineK * (1 - motionMix) * (1 - milkyMix);
   // גם כשמסתכלים על הגלקסיה מבחוץ (שם מערכת השמש קטנה מנקודה)
   asteroidPoints.material.opacity = (1 - motionMix) * (1 - milkyMix);
   asteroidPoints.visible = motionMix < 0.99 && milkyMix < 0.99;
@@ -774,7 +935,7 @@ const milky = (() => {
   //    הן נותנות לגלקסיה עובי אמיתי, שנראה מכל זווית. מלמעלה הן חלשות (התמונה החדה עושה את העבודה), ומהצד חזקות.
   // 3. הבליטה במרכז (בהמשך).
   // uFace: כמה אנחנו מסתכלים על הגלקסיה מלמעלה (1) או מהצד (0)
-  const PHOTO_SRC = window.innerWidth <= 720 ? 'textures/sky/m101-1k.jpg' : 'textures/sky/m101.jpg';
+  const PHOTO_SRC = 'textures/sky/m101.jpg'; // הגרסה המפורטת גם בטלפון
   const photoU = { uOpacity: { value: 0 }, uFace: { value: 1 } };
   // הגלקסיה מסובבת כך שהשמש (sunAnchor) יושבת במקום שבחרנו בתמונה – ברווח בין שתי זרועות (ראו photo-galaxy.js)
   const photo = new THREE.Group();
@@ -919,7 +1080,7 @@ const milky = (() => {
   // עם הגלקסיה מהתמונה, התמונה היא רק הזוהר הרך של הפס והאבק (רך ממילא, ולכן בטלפון מספיקה הגרסה הקטנה);
   // הכוכבים מצוירים בנפרד כנקודות חדות (skyStars, למטה), כדי שלא יימרחו כשהתמונה נמתחת על כל השמיים
   const skyMap = GALAXY_PHOTO
-    ? imageTexture(window.innerWidth <= 720 || touchDevice ? 'textures/sky/galaxy-photo-haze-2k.jpg' : 'textures/sky/galaxy-photo-haze.jpg')
+    ? imageTexture('textures/sky/galaxy-photo-haze.jpg')
     : imageTexture(window.innerWidth <= 720 ? 'textures/sky/galaxy-2k.jpg' : 'textures/sky/galaxy.jpg');
   const skyDome = new THREE.Mesh(
     new THREE.SphereGeometry(40000, 96, 48),
@@ -962,8 +1123,7 @@ const milky = (() => {
   skyStars.renderOrder = -1;
   skyDome.add(skyStars);
   function buildSkyStars(px) {
-    const phone = window.innerWidth <= 720 || touchDevice;
-    const NB = phone ? 30000 : 60000, NL = phone ? 7000 : 12000, R = 35000;
+    const NB = 60000, NL = 12000, R = 35000; // אותה כמות במחשב ובטלפון
     const random = seeded(31);
     const gauss = () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
     const cr = Math.cos(PHOTO_ROT), sr = Math.sin(PHOTO_ROT), R0 = GAL_SUN_R;
@@ -1025,10 +1185,10 @@ const milky = (() => {
   photoPoints.frustumCulled = false;
   photoPoints.renderOrder = 1;
   photo.add(photoPoints);
-  // כמה נקודות: בטלפון 200 אלף ובמחשב 600 אלף. מפתחים יכולים לשנות בהגדרות (נשמר בדפדפן הזה בלבד)
+  // כמה נקודות: 600 אלף, במחשב ובטלפון. מפתחים יכולים לשנות בהגדרות (נשמר בדפדפן הזה בלבד)
   const PHOTO_N0 = 220000; // הכמות שלפיה כוונו הבהירות והגודל של כל נקודה
   let photoPx = null, photoBuild = 0, warmup = 0;
-  const defaultStars = () => (window.innerWidth <= 720 || touchDevice ? 200000 : 600000);
+  const defaultStars = () => 600000; // אותו פירוט במחשב ובטלפון (מפתחים יכולים להוריד בהגדרות)
   const starCount = () => {
     try {
       const v = +localStorage.getItem('galaxyStars');
@@ -1240,7 +1400,7 @@ const blackHole = (() => {
   g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(y, z), y, z));
   g.scale.setScalar(BH_RS);
   scene.add(g);
-  const phone = window.innerWidth <= 720 || touchDevice;
+  const phone = false; // החור השחור באיכות מלאה גם בטלפון
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uDome: { value: null },
@@ -1408,12 +1568,11 @@ function createBody(data, isSun) {
   if (data.id === 'earth') {
     clouds = new THREE.Mesh(
       new THREE.SphereGeometry(data.size * 1.012, 96, 48),
-      new THREE.MeshPhongMaterial({ map: imageTexture('textures/earth_clouds_1024.png'), transparent: true, depthWrite: false, shininess: 2 }),
+      new THREE.MeshPhongMaterial({ color: '#ffffff', alphaMap: imageTexture('textures/planets/earth-clouds-2k.jpg', false), transparent: true, depthWrite: false, shininess: 2 }),
     );
     tilt.add(clouds);
-    group.add(atmosphere(data.size * 1.04, '#5aa8ff', 1.4));
   }
-  if (data.id === 'venus') group.add(atmosphere(data.size * 1.035, '#ffdca8', 0.9));
+  if (ATMOSPHERES[data.id]) group.add(atmoShell(data.size, ...ATMOSPHERES[data.id]));
 
   const body = { data, group, tilt, mesh, spin: 0, isSun, au: new THREE.Vector3(), clouds };
   mesh.userData.body = body;
@@ -1456,11 +1615,16 @@ function createBody(data, isSun) {
     tilt.add(ring);
     addRingShadow(mat, body.ringUniforms);
   }
+  if (!isSun) {
+    const [flow, shear] = FLOW[data.id] || [0, 0];
+    photoLook(mat, { k: LOOK_K[data.id] ?? 1, flow, shear });
+    if (clouds) photoLook(clouds.material);
+  }
 
   if (data.moon) {
     body.moon = new THREE.Mesh(
       new THREE.SphereGeometry(data.moon.size, 32, 16),
-      new THREE.MeshStandardMaterial({ map: moonImage, roughness: 1 }),
+      photoLook(new THREE.MeshStandardMaterial({ map: moonImage, roughness: 1 }), { k: 0.9 }),
     );
     group.add(body.moon);
   }
@@ -1473,7 +1637,7 @@ function createBody(data, isSun) {
       tilt.add(pivot);
       mesh = new THREE.Mesh(
         new THREE.SphereGeometry(m.size, 32, 16),
-        new THREE.MeshStandardMaterial({ map: moonImage, color: m.color, roughness: 1 }),
+        photoLook(new THREE.MeshStandardMaterial({ map: moonImage, color: m.color, roughness: 1 }), { k: 0.9 }),
       );
       mesh.position.x = data.size * m.dist;
       pivot.add(mesh);
@@ -1735,9 +1899,11 @@ function flyTo(body, duration = null, pose = null) {
     offset = new THREE.Vector3(0, 9, 26).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
   } else {
     // המצלמה מוצבת בין השמש לכוכב הלכת (בזווית), כדי לראות את הצד המואר
-    const dist = (sizeOf(body) * (body.data.rings ? 7 : 5.5) + 3) * (camera.aspect < 1 ? 1.6 : 1);
+    // קרוב, כך שהכוכב ממלא חלק גדול מהמסך (כמו בצילום), ובזווית שבה רואים גם קצת מהצד של הלילה – הגבול בין יום ללילה
+    // הוא מה שנותן לכדור נפח
+    const dist = (sizeOf(body) * (body.data.rings ? 5.2 : 3.6) + 0.6) * (camera.aspect < 1 ? 1.5 : 1);
     const out = body.group.position.clone().normalize();
-    offset = out.negate().applyAxisAngle(new THREE.Vector3(0, 1, 0), 40 * DEG).multiplyScalar(dist);
+    offset = out.negate().applyAxisAngle(new THREE.Vector3(0, 1, 0), 62 * DEG).multiplyScalar(dist);
     offset.y = dist * 0.35;
   }
   // הטיסה: המרחק מהמצלמה למה שמסתכלים עליו משתנה בקצב קבוע ב"סדרי גודל" (לוגריתמי) – כמו זום –
@@ -2288,7 +2454,39 @@ $('btn-scale').addEventListener('click', () => {
   else stopSpeaking();
 });
 
+// כשמתקרבים לכוכב לכת, מחליפים את המפה בגרסה המפורטת – במחשב ובטלפון.
+// בטלפון נשארת רק מפה מפורטת אחת בכל רגע: כשעוברים לכוכב אחר, הקודם חוזר לגרסה הרגילה (כדי לא למלא את הזיכרון)
+const hiResLoaded = new Map();
+const keepAllHiRes = !(window.innerWidth <= 720 || touchDevice);
+function loadHiRes(body) {
+  const id = body?.data?.id;
+  const mat = body?.mesh?.material;
+  if (!id || !mat || hiResLoaded.has(id)) return;
+  const paths = id === 'earth' ? ['textures/planets/earth-4k.jpg', 'textures/planets/earth-night-4k.jpg'] : [hiResPath(id)];
+  if (!paths[0]) return;
+  if (!keepAllHiRes) {
+    for (const [oldId, old] of hiResLoaded) {
+      old.restore();
+      hiResLoaded.delete(oldId);
+    }
+  }
+  const base = { map: mat.map, emissiveMap: mat.emissiveMap };
+  const entry = { textures: [], restore() {
+    mat.map = base.map;
+    if (id === 'earth') mat.emissiveMap = base.emissiveMap;
+    for (const t of this.textures) t.dispose();
+  } };
+  hiResLoaded.set(id, entry);
+  Promise.all(paths.map((p) => loadTexture(p, true))).then((tex) => {
+    if (hiResLoaded.get(id) !== entry) return tex.forEach((t) => t.dispose()); // כבר עברנו לכוכב אחר
+    entry.textures = tex;
+    mat.map = tex[0];
+    if (id === 'earth') mat.emissiveMap = tex[1];
+  }).catch(() => hiResLoaded.delete(id));
+}
+
 function showBody(body) {
+  loadHiRes(body);
   if (body === cometsInfo) return showComets();
   if (body === milkyInfo) {
     markActive(milkyInfo);
@@ -2578,16 +2776,26 @@ function pulseSun() {
 // התפרצויות סולאריות: כל התפרצות נמשכת כ־11 שניות, ולא יותר משלוש יחד. e = (זווית על השפה, התקדמות 0..1, חצי רוחב, גובה)
 const eruptions = [0, 1, 2].map(() => ({ on: false, t: 0, dur: 11, angle: 0, width: 0.3, amp: 0.6 }));
 let eruptWait = 1.5;
+const sunQInv = new THREE.Quaternion();
 function updateEruptions(dt) {
+  // הצירים של המצלמה, כפי שהם נראים מתוך השמש המסתובבת
+  sun.mesh.getWorldQuaternion(sunQInv).invert();
+  const E = sunErupt;
+  E.uRight.value.set(1, 0, 0).applyQuaternion(camera.quaternion).applyQuaternion(sunQInv);
+  E.uUp.value.set(0, 1, 0).applyQuaternion(camera.quaternion).applyQuaternion(sunQInv);
+  E.uFwd.value.set(0, 0, 1).applyQuaternion(camera.quaternion).applyQuaternion(sunQInv);
   eruptWait -= dt;
-  const free = eruptions.find((x) => !x.on);
-  if (eruptWait <= 0 && free) {
-    Object.assign(free, { on: true, t: 0, angle: Math.random() * Math.PI * 2 - Math.PI, width: 0.16 + Math.random() * 0.2, amp: 0.4 + Math.random() * 0.4, dur: 9 + Math.random() * 4 });
+  const free = eruptions.findIndex((x) => !x.on);
+  if (eruptWait <= 0 && free >= 0) {
+    // התפרצות חדשה מתחילה במקום על השמש שנמצא עכשיו בשפה (כדי שנראה אותה), ונשארת במקום הזה על השמש
+    const a = Math.random() * Math.PI * 2;
+    E.uEd.value[free].copy(E.uRight.value).multiplyScalar(Math.cos(a)).addScaledVector(E.uUp.value, Math.sin(a)).normalize();
+    Object.assign(eruptions[free], { on: true, t: 0, width: 0.16 + Math.random() * 0.2, amp: 0.4 + Math.random() * 0.4, dur: 9 + Math.random() * 4 });
     eruptWait = 3 + Math.random() * 5;
   }
   eruptions.forEach((x, i) => {
     if (x.on && (x.t += dt) >= x.dur) x.on = false;
-    sunErupt.uE.value[i].set(x.angle, x.t / x.dur, x.width, x.on ? x.amp : 0);
+    E.uE.value[i].set(0, x.t / x.dur, x.width, x.on ? x.amp : 0);
   });
 }
 function updateSunPulse(dt) {
