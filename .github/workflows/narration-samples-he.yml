@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [slows, slows-takes]
+        group: [tails2, spot4]
     steps:
       - uses: actions/checkout@v4
 
