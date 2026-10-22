@@ -13,6 +13,7 @@ const AUDIO_DIR = LANG === 'en' ? 'audio/en/' : 'audio/';
 const SETTINGS_KEY = 'narrator-settings';
 export const DEFAULT_SETTINGS = { pitch: 1, speed: 1 };
 const WAKE_LEAD = 0.35; // שניות שקט לפני ההקראה הראשונה, כשהשמע עוד "מתעורר"
+const WAKE_LEAD_DESKTOP = 0.12; // כמו WAKE_LEAD, במחשב אחרי ההקראה הראשונה
 const END_SILENCE = 0.08; // שניות שקט שנשארות בסוף כל משפט מוקלט
 
 export function splitSentences(text) {
@@ -138,9 +139,27 @@ export class Narrator {
       // אם חסר קובץ לחלק מהמשפטים, מקריאים הכול בקול הדפדפן כדי שלא יתחלף קול באמצע
       useFiles = !!ctx && sentences.every((s) => this.files[s]);
       this.status = useFiles ? 'files' : this.voice ? 'browser' : 'none';
-      // מורידים מראש את כל המשפטים של הטקסט, כדי שלא תהיה המתנה לרשת בין משפט למשפט
-      if (useFiles) sentences.forEach((s) => this.buffer(this.files[s]).catch(() => {}));
+      // מורידים מראש את המשפטים של הטקסט, כדי שלא תהיה המתנה לרשת בין משפט למשפט. קודם הראשון לבדו:
+      // אם כולם יורדים יחד, הם מתחרים על אותו חיבור והמשפט הראשון, שממנו מתחילה ההקראה, מגיע באיחור
+      if (useFiles) {
+        const rest = () => sentences.slice(1).forEach((s) => this.buffer(this.files[s]).catch(() => {}));
+        this.buffer(this.files[sentences[0]]).then(rest, rest);
+      }
       next();
+    });
+  }
+
+  // מכין מראש את המשפט הראשון של כל טקסט (בזמן שקט), כדי שההקראה תתחיל מיד כשלוחצים ולא אחרי הורדה ופענוח
+  preload(texts) {
+    this.ready.then(() => {
+      if (!this.ctx || !this.files) return;
+      const files = texts.map((t) => this.files[splitSentences(t)[0]]).filter(Boolean);
+      let k = 0;
+      const step = () => {
+        if (k >= files.length) return;
+        this.buffer(files[k++]).catch(() => {}).finally(() => setTimeout(step, 150));
+      };
+      step();
     });
   }
 
@@ -168,7 +187,10 @@ export class Narrator {
         if (token !== this.token) return;
         const ctx = this.audioContext();
         // אחרי הפסקה (ובהקראה הראשונה) השמע "מתעורר" לאט וחותך את תחילת המשפט, בעיקר את "שלום!"
-        const lead = this.lastEnd === undefined || ctx.currentTime - this.lastEnd > 1.5 ? WAKE_LEAD : 0;
+        // במחשב (עכבר) השמע כבר ער אחרי ההקראה הראשונה, ולכן אין צורך בכל השקט הזה: ההקראה מתחילה מהר יותר
+        const first = this.lastEnd === undefined;
+        const wake = !first && matchMedia('(pointer: fine)').matches ? WAKE_LEAD_DESKTOP : WAKE_LEAD;
+        const lead = first || ctx.currentTime - this.lastEnd > 1.5 ? wake : 0;
         if (ctx.state !== 'running') ctx.resume().catch(() => {});
         const src = ctx.createBufferSource();
         src.buffer = buffer;

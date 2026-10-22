@@ -3410,6 +3410,11 @@ function closeIntro() {
   $('intro').hidden = true;
   // בונים את הכוכבים של שביל החלב מראש, ברגע שקט אחרי הפתיחה – כדי שזום אאוט או טיסה לגלקסיה לא יקרטעו
   setTimeout(() => (window.requestIdleCallback || setTimeout)(() => milky.load()), 1500);
+  // ומכינים את המשפט הראשון של ההסבר על כל כוכב, כדי שההקראה תתחיל מיד כשלוחצים
+  setTimeout(() => (window.requestIdleCallback || setTimeout)(() => {
+    narrator.audioContext();
+    narrator.preload(bodies.map((b) => b.data.narration).filter(Boolean));
+  }), 4000);
 }
 // ---------- המסך נשאר דולק ----------
 // בטלפון המסך נכבה אחרי כמה שניות בלי מגע. כל עוד האתר פתוח וגלוי, מבקשים מהמכשיר להשאיר את המסך דולק
