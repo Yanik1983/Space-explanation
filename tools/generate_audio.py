@@ -128,6 +128,7 @@ HE_PRONUNCIATION = [
     ("אליפסה", "Ellipsa"),
     ("שמיכה", "smicha"),  # נבחרה הדוגמה blanket-5
     ("שבתאי", "shabtai"),  # נבחרה הדוגמה saturn-6
+    ("ענק גזים", "ענק גאזים"),  # נבחרה הדוגמה gasgiant-5
 ]
 
 
