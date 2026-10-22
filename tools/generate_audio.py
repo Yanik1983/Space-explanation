@@ -127,6 +127,7 @@ HE_PRONUNCIATION = [
     ("אליפסות", "elipsot"),
     ("אליפסה", "Ellipsa"),
     ("שמיכה", "smicha"),  # נבחרה הדוגמה blanket-5
+    ("שבתאי", "shabtai"),  # נבחרה הדוגמה saturn-6
 ]
 
 

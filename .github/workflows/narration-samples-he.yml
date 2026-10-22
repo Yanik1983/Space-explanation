@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [200b, 200b-takes]
+        group: [rings2, rings2-takes]
     steps:
       - uses: actions/checkout@v4
 
