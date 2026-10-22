@@ -73,7 +73,7 @@ export const PLANETS = [
     ],
     funFact: 'On Venus the Sun rises in the west and sets in the east, because it spins backwards!',
     narration:
-      'This is Venus. It is almost the same size as Earth, but it is the hottest planet in the solar system. ' +
+      'This is Venus, the brightest thing in the night sky after the Moon. It is almost the same size as Earth, but it is the hottest planet in the solar system. ' +
       'It is wrapped in thick clouds that trap the heat, like a very thick blanket, so it is even hotter there than on Mercury. ' +
       'Venus has another oddity: it spins in the opposite direction from most planets, and very slowly. ' +
       'One spin takes longer than a whole trip around the Sun! ' +
