@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [moons270, moons270-takes]
+        group: [200b, 200b-takes]
     steps:
       - uses: actions/checkout@v4
 
