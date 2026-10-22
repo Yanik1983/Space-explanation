@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [blanket, blanket-takes]
+        group: [mars2, mars2-takes]
     steps:
       - uses: actions/checkout@v4
 
