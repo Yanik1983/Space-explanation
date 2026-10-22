@@ -502,3 +502,8 @@ body.leaving { opacity: 0; transition: opacity 0.35s ease-in; }
   100% { transform: translate(0, 0); }
 }
 @media (prefers-reduced-motion: reduce) { .film-grain { animation: none; } }
+
+/* "טסים בחלל": כפתור למעבר בין מהירות אמיתית למואטת, בתוך חלון ההסבר */
+.motion-speed-btn { margin-top: 4px; }
+.label.voyager-label { color: #eaf6ff; border-color: rgba(140, 220, 255, 0.7); }
+.label.centre-label { color: #ffd9a8; border-color: rgba(255, 179, 71, 0.6); pointer-events: none; }

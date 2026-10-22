@@ -769,8 +769,20 @@ function updateComets() {
 // הוא מוטה בערך 60 מעלות למישור שבו כוכבי הלכת מקיפים את השמש.
 // השמש טסה קדימה ומשאירה זנב זוהר, וכל כוכב לכת מצייר מאחוריה שביל זוהר בצורת ספירלה.
 const GALAXY_DIR = poleVector([318, 48.3]);
-const GALAXY_SPEED = 0.09; // יחידות תצוגה ליום – מואט מאוד לעומת המציאות, כדי שהספירלות ייכנסו במסך
-const TRAIL_DAYS = 2200; // אורך השביל: בערך שש שנים אחורה
+const GALAXY_SPEED_SLOW = 0.09; // יחידות תצוגה ליום – מואט מאוד לעומת המציאות, כדי שהספירלות ייכנסו במסך
+// במהירות האמיתית השמש עוברת כ־48 פעמים המרחק לכדור הארץ בשנה (230 ק"מ בשנייה) – 0.13 יחידות אסטרונומיות ביום.
+// ביחידות של התצוגה: לפי המרחק של כדור הארץ מהשמש בתצוגה, כך שהיחס בין המסלול של כדור הארץ לדרך של השמש אמיתי
+const realGalaxySpeed = () => 0.1315 * displayRadius(1);
+let GALAXY_SPEED = GALAXY_SPEED_SLOW, realSpeedK = 0, realSpeedOn = false;
+const TRAIL_DAYS_SLOW = 2200; // אורך השביל: בערך שש שנים אחורה
+const TRAIL_DAYS_REAL = 420; // במהירות אמיתית השבילים ארוכים מאוד – מספיק קצת יותר משנה
+let TRAIL_DAYS = TRAIL_DAYS_SLOW;
+// מאיפה מגיע הגז שבין הכוכבים (ה"רוח הבין־כוכבית"): קו אורך אקליפטי 255°, קו רוחב +5°, במהירות 26 ק"מ בשנייה.
+// הבועה של השמש (ההליוספרה) מופנית אליו, והזנב שלה לכיוון ההפוך
+const ISM_FROM = (() => {
+  const l = 255.4 * DEG, b = 5.2 * DEG;
+  return new THREE.Vector3(Math.cos(b) * Math.cos(l), Math.sin(b), -Math.cos(b) * Math.sin(l)).normalize();
+})();
 const TRAIL_POINTS = 600;
 const MOTION_MIN_SPEED = 25; // במצב הזה הזמן רץ לפחות 25 ימים בשנייה, כדי לראות את כוכבי הלכת מסתובבים
 const galaxyInfo = { data: GALAXY_MOTION, isGalaxy: true, moons: [], group: new THREE.Object3D() };
@@ -789,6 +801,7 @@ function stepFade(key, target, up, down, dt) {
   return p * p * (3 - 2 * p);
 }
 let trails = [], dust = null, motionArrow = null, sunTail = null;
+let helio = null, ismGas = null, nearStars = null, voyagers = [], centreArrow = null, centreLabel = null, speedBtn = null, motionCamFree = false;
 
 function softDot() {
   const c = document.createElement('canvas');
@@ -848,13 +861,122 @@ function initGalaxyMotion() {
   });
   scene.add(dust);
 
+  // ההליוספרה: הבועה שהרוח של השמש מנפחת בתוך הגז שבין הכוכבים. מלפנים (מול הגז שמגיע) היא בערך 120 יחידות אסטרונומיות
+  // מהשמש, ומאחור היא נמתחת לזנב ארוך, כמו שביט. בפנים יש עוד קליפה חלשה: "גל ההלם", שבו הרוח של השמש מאטה פתאום
+  const helioShell = (au, tail, color, strength) => {
+    const geo = new THREE.SphereGeometry(1, 96, 64);
+    const pa = geo.attributes.position, v = new THREE.Vector3();
+    for (let i = 0; i < pa.count; i++) {
+      v.fromBufferAttribute(pa, i);
+      const c = v.dot(ISM_FROM);
+      const k = c >= 0 ? 1 - 0.12 * c : 1 + tail * Math.pow(-c, 1.6);
+      pa.setXYZ(i, v.x * k, v.y * k, v.z * k);
+    }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: 0 }, uStrength: { value: strength }, uTime: sunUniforms.uTime },
+      vertexShader: `${LOGDEPTH_V[0]}
+        varying vec3 vN; varying vec3 vV; varying vec3 vO;
+        void main() {
+          vO = position;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vN = normalize(normalMatrix * normal);
+          vV = -mv.xyz;
+          gl_Position = projectionMatrix * mv;
+          ${LOGDEPTH_V[1]}
+        }`,
+      fragmentShader: `${LOGDEPTH_F[0]}
+        uniform vec3 uColor; uniform float uOpacity; uniform float uStrength; uniform float uTime;
+        varying vec3 vN; varying vec3 vV; varying vec3 vO;
+        float h(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+        float n3(vec3 x) {
+          vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(h(i), h(i + vec3(1, 0, 0)), f.x), mix(h(i + vec3(0, 1, 0)), h(i + vec3(1, 1, 0)), f.x), f.y),
+                     mix(mix(h(i + vec3(0, 0, 1)), h(i + vec3(1, 0, 1)), f.x), mix(h(i + vec3(0, 1, 1)), h(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+        }
+        void main() {
+          ${LOGDEPTH_F[1]}
+          // הקצוות של הבועה בהירים יותר (שם מסתכלים דרך הרבה מהקליפה), והפנים כמעט שקופים; עננים עדינים זורמים עליה
+          float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.5);
+          float flow = 0.65 + 0.35 * n3(normalize(vO) * 4.0 + vec3(uTime * 0.05, 0.0, -uTime * 0.04));
+          gl_FragColor = vec4(uColor * (0.015 + rim) * flow * uStrength * uOpacity, 1.0);
+          #include <colorspace_fragment>
+        }`,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    }));
+    mesh.userData.au = au;
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    scene.add(mesh);
+    return mesh;
+  };
+  helio = { pause: helioShell(120, 1.5, '#6fd2ff', 0.2), shock: helioShell(90, 0.9, '#ffb36b', 0.06) };
+
+  // החלליות וויאג'ר 1 ו־2 – היחידות שכבר יצאו מהבועה (ב־2012 וב־2018). מקום ומרחק בערך נכונים לשנת 2026
+  for (const [name, ra, dec, au] of [[tt("וויאג'ר 1", 'Voyager 1'), 258.3, 12.1, 169], [tt("וויאג'ר 2", 'Voyager 2'), 302.8, -59.6, 142]]) {
+    const el = document.createElement('div');
+    el.className = 'label motion-label voyager-label';
+    el.textContent = `🛰️ ${name}`;
+    el.style.display = 'none';
+    $('labels').appendChild(el);
+    const dotMesh = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot, color: '#ffffff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    dotMesh.visible = false;
+    scene.add(dotMesh);
+    voyagers.push({ el, dot: dotMesh, dir: poleVector([ra, dec]), au });
+  }
+
+  // הגז שבין הכוכבים: מגיע מהכיוון האמיתי שלו ונזרם מסביב לבועה של השמש (כמו מים סביב אבן), בלי להיכנס אליה
+  {
+    const N = 800, pos = new Float32Array(N * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    ismGas = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.5, map: dot, color: '#b9c8ff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false }));
+    ismGas.frustumCulled = false;
+    ismGas.visible = false;
+    ismGas.userData.ready = false;
+    scene.add(ismGas);
+  }
+
+  // כוכבים קרובים: עומדים במקום בגלקסיה, ולכן כשמערכת השמש טסה הם זזים לאט לאחור – הקרובים מהר יותר מהרחוקים
+  {
+    const N = 320, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const sideS = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
+    const upS = new THREE.Vector3().crossVectors(sideS, GALAXY_DIR).normalize();
+    nearStars = new THREE.Points(geo, new THREE.PointsMaterial({ size: 2.2, map: dot, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false }));
+    nearStars.userData.seeds = Array.from({ length: N }, (_, i) => {
+      const a = Math.random() * Math.PI * 2, r = 500 + Math.random() * 2600;
+      const warm = Math.random();
+      const c = warm < 0.3 ? [1, 0.78, 0.58] : warm < 0.65 ? [1, 0.95, 0.88] : [0.78, 0.86, 1];
+      const b = 0.35 + 0.65 * Math.random() ** 3;
+      col.set(c.map((x) => x * b), i * 3);
+      return { perp: sideS.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(upS, Math.sin(a) * r), phase: Math.random() * 9000 };
+    });
+    nearStars.frustumCulled = false;
+    nearStars.visible = false;
+    scene.add(nearStars);
+  }
+
+  // כפתור: מהירות אמיתית (הספירלות נמתחות לקו גלי ארוך) או מואטת (רואים את הספירלות)
+  speedBtn = document.createElement('button');
+  speedBtn.type = 'button';
+  speedBtn.className = 'btn btn-primary btn-small motion-speed-btn';
+  const setSpeedText = () => (speedBtn.textContent = realSpeedOn ? tt('🐢 להאט את התנועה', '🐢 Slow it down') : tt('🚀 מהירות אמיתית', '🚀 Real speed'));
+  setSpeedText();
+  speedBtn.addEventListener('click', () => {
+    realSpeedOn = !realSpeedOn;
+    setSpeedText();
+  });
+
   // חץ שמראה לאן מערכת השמש טסה
-  motionArrow = new THREE.ArrowHelper(GALAXY_DIR, GALAXY_DIR.clone().multiplyScalar(18), 40, 0x9db8ff, 9, 5);
+  motionArrow = new THREE.ArrowHelper(GALAXY_DIR, GALAXY_DIR.clone().multiplyScalar(30), 150, 0x9db8ff, 22, 11);
   motionArrow.visible = false;
   scene.add(motionArrow);
   galaxyInfo.label = document.createElement('div');
   galaxyInfo.label.className = 'label motion-label';
-  galaxyInfo.label.textContent = tt('כיוון התנועה של מערכת השמש', 'The direction the Solar System is moving');
+  galaxyInfo.label.textContent = tt('כיוון התנועה של מערכת השמש (לכיוון קבוצת הברבור)', 'The direction the Solar System is moving (toward Cygnus)');
   galaxyInfo.label.style.display = 'none';
   $('labels').appendChild(galaxyInfo.label);
   galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-44);
@@ -869,7 +991,30 @@ function updateGalaxyMotion(dt) {
   trailGrow = motionTarget ? Math.min(1, trailGrow + dt / 6) : motionMix > 0 ? trailGrow : 0;
   const on = motionMix > 0.001;
   for (const t of trails) t.line.visible = t.glow.visible = on;
-  dust.visible = motionArrow.visible = on;
+  motionArrow.visible = on;
+  dust.visible = false; // הוחלף בגז שזורם מסביב לבועה של השמש (ismGas)
+  helio.pause.visible = helio.shock.visible = ismGas.visible = nearStars.visible = on;
+  for (const v of voyagers) v.dot.visible = on;
+  // מעבר רך בין המהירות המואטת לאמיתית
+  realSpeedK += ((realSpeedOn ? 1 : 0) - realSpeedK) * Math.min(1, dt * 1.2);
+  const rk = smoothstep01(realSpeedK);
+  GALAXY_SPEED = GALAXY_SPEED_SLOW + (realGalaxySpeed() - GALAXY_SPEED_SLOW) * rk;
+  TRAIL_DAYS = TRAIL_DAYS_SLOW + (TRAIL_DAYS_REAL - TRAIL_DAYS_SLOW) * rk;
+  // המצלמה מסתובבת לאט סביב השמש (כמו בסרט), עד שנוגעים במסך
+  controls.autoRotate = !!motionTarget && !tween && !motionCamFree;
+  controls.autoRotateSpeed = 0.35;
+  if (!centreArrow) {
+    // חץ שני: לכיוון מרכז הגלקסיה (בקבוצת הכוכבים קשת), שסביבו מערכת השמש מסתובבת
+    centreArrow = new THREE.ArrowHelper(GAL_CENTRE_DIR, GAL_CENTRE_DIR.clone().multiplyScalar(30), 120, 0xffb347, 20, 10);
+    centreArrow.visible = false;
+    scene.add(centreArrow);
+    centreLabel = document.createElement('div');
+    centreLabel.className = 'label motion-label centre-label';
+    centreLabel.textContent = tt('לכיוון מרכז הגלקסיה (קבוצת הכוכבים קשת)', 'Toward the galactic center (Sagittarius)');
+    centreLabel.style.display = 'none';
+    $('labels').appendChild(centreLabel);
+  }
+  centreArrow.visible = on;
 
   // פחות עומס: קווי המסלולים, האסטרואידים והשביטים נעלמים בהדרגה
   // ומקרוב, כשמסתכלים על כוכב לכת אחד, הקווים כמעט נעלמים – כדי שלא יחצו את הכוכב כמו בציור
@@ -894,7 +1039,8 @@ function updateGalaxyMotion(dt) {
   }
   if (!on) {
     sunTail.visible = false;
-    galaxyInfo.label.style.display = 'none';
+    galaxyInfo.label.style.display = centreLabel.style.display = 'none';
+    for (const v of voyagers) v.el.style.display = 'none';
     return;
   }
   const days = TRAIL_DAYS * (0.04 + 0.96 * smoothstep01(trailGrow));
@@ -915,21 +1061,46 @@ function updateGalaxyMotion(dt) {
   setTail(sunTail, ORIGIN, BACKWARD, GALAXY_SPEED * days * 0.8, 9);
   sunTail.material.uniforms.strength.value = 1.2 * motionMix;
 
-  // האבק עומד במקום בחלל, ולכן הוא זז לאחור בדיוק במהירות שבה השמש טסה קדימה
-  const L = 700, flow = simDays * GALAXY_SPEED;
-  const pa = dust.geometry.attributes.position;
-  dust.userData.seeds.forEach((sd, i) => {
-    const s = (((sd.phase + flow) % L) + L) % L;
-    motionTmp.copy(sd.perp).addScaledVector(GALAXY_DIR, L / 2 - s);
-    pa.setXYZ(i, motionTmp.x, motionTmp.y, motionTmp.z);
-  });
-  pa.needsUpdate = true;
-  dust.material.opacity = motionMix * 0.55;
+  // הכוכבים הקרובים עומדים במקום בגלקסיה, ולכן הם זזים לאחור בדיוק במהירות שבה השמש טסה קדימה
+  {
+    const L = 9000;
+    nearFlow += GALAXY_SPEED * (timeRuns() ? Math.max(simSpeed(), MOTION_MIN_SPEED * motionMix) : 0) * dt;
+    const pa = nearStars.geometry.attributes.position;
+    nearStars.userData.seeds.forEach((sd, i) => {
+      const s = (((sd.phase + nearFlow) % L) + L) % L;
+      motionTmp.copy(sd.perp).addScaledVector(GALAXY_DIR, L / 2 - s);
+      pa.setXYZ(i, motionTmp.x, motionTmp.y, motionTmp.z);
+    });
+    pa.needsUpdate = true;
+    nearStars.material.opacity = motionMix * 0.85;
+  }
+  // הבועה של השמש, בגודל לפי המרחקים בתצוגה
+  for (const shell of [helio.pause, helio.shock]) {
+    shell.scale.setScalar(displayRadius(shell.userData.au));
+    shell.material.uniforms.uOpacity.value = motionMix;
+  }
+  // הגז זורם מסביב לבועה. המהירות לפי זרימה סביב כדור: נעצר מול הבועה, ומאיץ בצדדים שלה
+  updateIsmGas(dt);
+  for (const v of voyagers) {
+    toDisplay(motionTmp.copy(v.dir).multiplyScalar(v.au), v.dot.position);
+    v.dot.scale.setScalar(7);
+    v.dot.material.opacity = motionMix;
+    motionTmp.copy(v.dot.position).project(camera);
+    const showV = motionTmp.z < 1 && motionMix > 0.5;
+    v.el.style.display = showV ? '' : 'none';
+    if (showV) v.el.style.transform = `translate(-50%, 0) translate(${(motionTmp.x * 0.5 + 0.5) * innerWidth}px, ${(-motionTmp.y * 0.5 + 0.5) * innerHeight + 8}px)`;
+  }
+  centreArrow.line.material.transparent = centreArrow.cone.material.transparent = true;
+  centreArrow.line.material.opacity = centreArrow.cone.material.opacity = motionMix;
+  motionTmp.copy(GAL_CENTRE_DIR).multiplyScalar(165).project(camera);
+  const showC = motionTmp.z < 1 && motionMix > 0.5;
+  centreLabel.style.display = showC ? '' : 'none';
+  if (showC) centreLabel.style.transform = `translate(-50%, 0) translate(${(motionTmp.x * 0.5 + 0.5) * innerWidth}px, ${(-motionTmp.y * 0.5 + 0.5) * innerHeight}px)`;
 
   motionArrow.line.material.transparent = motionArrow.cone.material.transparent = true;
   motionArrow.line.material.opacity = motionArrow.cone.material.opacity = motionMix;
   // תווית ליד קצה החץ
-  motionTmp.copy(GALAXY_DIR).multiplyScalar(64).project(camera);
+  motionTmp.copy(GALAXY_DIR).multiplyScalar(195).project(camera);
   const show = motionTmp.z < 1 && motionMix > 0.5;
   galaxyInfo.label.style.display = show ? '' : 'none';
   if (show) {
@@ -941,7 +1112,42 @@ function updateGalaxyMotion(dt) {
   }
 }
 const smoothstep01 = (t) => t * t * (3 - 2 * t);
+let nearFlow = 0;
+const gasE = ISM_FROM.clone().negate(); // לאן הגז זורם
+const gasA = new THREE.Vector3().crossVectors(gasE, UP).normalize(), gasB = new THREE.Vector3().crossVectors(gasA, gasE).normalize();
+const gasV = new THREE.Vector3(), gasR = new THREE.Vector3();
+function spawnGas(pos, i, a, anywhere) {
+  // חלקיק חדש: במעגל רחב מול הבועה (או בכל מקום בזרם, בהתחלה)
+  const ang = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * 2.8 * a;
+  const along = anywhere ? (Math.random() * 7 - 3.5) * a : -3.5 * a;
+  gasR.copy(gasA).multiplyScalar(Math.cos(ang) * rr).addScaledVector(gasB, Math.sin(ang) * rr).addScaledVector(gasE, along);
+  if (gasR.length() < a * 1.05) gasR.setLength(a * 1.2);
+  pos.setXYZ(i, gasR.x, gasR.y, gasR.z);
+}
+function updateIsmGas(dt) {
+  const a = displayRadius(120) * 0.92, U = a * 0.3;
+  const pos = ismGas.geometry.attributes.position;
+  if (!ismGas.userData.ready) {
+    for (let i = 0; i < pos.count; i++) spawnGas(pos, i, a, true);
+    ismGas.userData.ready = true;
+  }
+  for (let i = 0; i < pos.count; i++) {
+    gasR.fromBufferAttribute(pos, i);
+    const r = gasR.length();
+    const rh = gasR.clone().divideScalar(r);
+    const k = (a * a * a) / (2 * r * r * r);
+    // זרימה סביב כדור: v = U · (e + k · (e − 3(e·r̂) r̂))
+    gasV.copy(gasE).addScaledVector(gasE, k).addScaledVector(rh, -3 * k * gasE.dot(rh)).multiplyScalar(U * dt);
+    gasR.add(gasV);
+    if (gasR.length() < a * 1.01 || gasR.dot(gasE) > 3.6 * a) spawnGas(pos, i, a, false);
+    else pos.setXYZ(i, gasR.x, gasR.y, gasR.z);
+  }
+  pos.needsUpdate = true;
+  ismGas.material.opacity = motionMix * 0.45;
+}
 initGalaxyMotion();
+// בתחנה הזאת המצלמה מסתובבת לבד; ברגע שהמשתמש גורר או מסובב – היא עוצרת
+controls.addEventListener('start', () => (motionCamFree = true));
 
 // ---------- שביל החלב מבחוץ ----------
 // הגלקסיה בנויה בקוד מכוכבים (ראו בהמשך) ומכוונת כמו הגלקסיה האמיתית: המרכז שלה בכיוון
@@ -1191,7 +1397,7 @@ const milky = (() => {
   skyDome.add(skyStars);
   function buildSkyStars(px, catalog) {
     // NL: הכוכבים האמיתיים מהקטלוג (כ־9,000 הבהירים שרואים בעין), במקומות שלהם בשמיים ובצבע לפי הטמפרטורה
-    const NB = 60000, NL = catalog.length / 4, R = 35000; // אותה כמות במחשב ובטלפון
+    const NB = 26000, NL = catalog.length / 4, R = 35000; // אותה כמות במחשב ובטלפון (יותר מזה – הפס נראה כמו שלג)
     const random = seeded(31);
     const gauss = () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
     const cr = Math.cos(PHOTO_ROT), sr = Math.sin(PHOTO_ROT), R0 = GAL_SUN_R;
@@ -1219,7 +1425,7 @@ const milky = (() => {
       col[i * 3] = b * (0.5 + 0.5 * r); col[i * 3 + 1] = b * (0.5 + 0.5 * g); col[i * 3 + 2] = b * (0.5 + 0.5 * bl);
       size[i] = 1.3 + 1.6 * Math.min(1, b);
     };
-    top.forEach((c, i) => put(i, c.x, c.y, c.z, Math.min(1.4, 0.25 + 0.75 * Math.sqrt(c.f / fRef)), c.r, c.g, c.b));
+    top.forEach((c, i) => put(i, c.x, c.y, c.z, Math.min(1.2, 0.12 + 0.7 * Math.sqrt(c.f / fRef)), c.r, c.g, c.b));
     // הכיוונים בקטלוג הם בשמיים האמיתיים (כמו כל העולם באתר); הכדור של השמיים מסובב, ולכן מעבירים אותם למערכת שלו
     const toDome = skyDome.quaternion.clone().invert();
     for (let i = 0; i < NL; i++) {
@@ -1420,6 +1626,8 @@ function updateMilkyWay(dt) {
   // השמיים נעלמים רק כשיוצאים מהגלקסיה (אז רואים אותה מבחוץ)
   milky.skyDome.visible = milkyMix < 0.999;
   milky.skyDome.material.opacity = 1 - milkyMix;
+  // ב"טסים בחלל" השמיים קצת כהים יותר, כדי שהשבילים, הבועה והחלליות יבלטו
+  if (GALAXY_PHOTO) milky.skyDome.material.color.setScalar(0.5 * (1 - 0.6 * motionMix));
   milky.skyDome.position.copy(camera.position);
   const on = milkyMix > 0.001;
   for (const o of [milky.disk, milky.core, milky.here, milky.starPoints, milky.dustPoints, milky.glowPoints]) o.visible = on;
@@ -1439,7 +1647,7 @@ function updateMilkyWay(dt) {
     milky.photo.visible = true;
     milky.photoPlane.visible = milky.bulge.visible = false;
     const m = milky.photoMat.uniforms;
-    m.uOpacity.value = inside * 0.12;
+    m.uOpacity.value = inside * 0.035; // 600 אלף נקודות מכל הכיוונים: בעוצמה גבוהה יותר הן נראות כמו שלג
     m.uTime.value = performance.now() / 1000;
     m.uScale.value = (renderer.domElement.height / 2) / Math.tan((camera.fov * DEG) / 2);
     m.uMaxPx.value = 2 * renderer.getPixelRatio();
@@ -1461,7 +1669,7 @@ function updateMilkyWay(dt) {
   starField.material.opacity = 1 - milkyMix;
   // עם הגלקסיה מהתמונה, הכוכבים החדים בשמיים (skyStars) מחליפים את הכוכבים האקראיים
   starField.visible = !GALAXY_PHOTO;
-  milky.skyStarsMat.uniforms.uOpacity.value = 1 - milkyMix;
+  milky.skyStarsMat.uniforms.uOpacity.value = (1 - milkyMix) * (1 - 0.6 * motionMix);
   milky.skyStarsMat.uniforms.uPR.value = renderer.getPixelRatio();
   controls.maxDistance = on || tween || followBody === milkyInfo || freeGalaxy ? 60000 : ZOOM_LIMIT;
   if (!on) {
@@ -2008,7 +2216,8 @@ function flyTo(body, duration = null, pose = null) {
   } else if (body.isGalaxy) {
     // מבט מהצד על השבילים: מאונך לכיוון התנועה
     const side = new THREE.Vector3().crossVectors(GALAXY_DIR, UP).normalize();
-    offset = side.multiplyScalar(-250).add(new THREE.Vector3(0, 30, 0)).multiplyScalar(camera.aspect < 1 ? 1.8 : 1);
+    // רחוק מספיק כדי לראות גם את הבועה של השמש (ההליוספרה) ואת החלליות וויאג'ר
+    offset = side.multiplyScalar(-760).add(new THREE.Vector3(0, 220, 0)).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
   } else if (body.isBlackHole) {
     // מהצד של השמש, קצת מעל טבעת הגז – כמו הצילום המפורסם מהסרט
     const z = GAL_CENTRE_DIR.clone().negate();
@@ -2703,11 +2912,17 @@ function showBody(body) {
     return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
   }
   if (body === galaxyInfo) {
+    motionCamFree = false;
     markActive(galaxyInfo);
     presenter.play('open', 2.6);
     flyTo(galaxyInfo, 3);
     const d = GALAXY_MOTION;
-    return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+    showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+    // כפתור המהירות בתוך חלון ההסבר (כך הוא לא מסתיר את התוויות על המסך)
+    speedBtn.hidden = false;
+    $('panel-moons').replaceChildren(speedBtn);
+    $('panel-moons').hidden = false;
+    return;
   }
   const d = body.data;
   markActive(body);
