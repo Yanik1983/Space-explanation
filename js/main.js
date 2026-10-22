@@ -3412,6 +3412,8 @@ function closeIntro() {
   setTimeout(() => (window.requestIdleCallback || setTimeout)(() => milky.load()), 1500);
   // ומכינים את המשפט הראשון של ההסבר על כל כוכב, כדי שההקראה תתחיל מיד כשלוחצים
   setTimeout(() => (window.requestIdleCallback || setTimeout)(() => {
+    // מהדרים מראש את כל הכוכבים: אחרת כל כוכב מהודר רק כשהוא נכנס למסך בפעם הראשונה, וזה "תוקע" את המסך ואת ההקראה לרגע
+    renderer.compileAsync?.(scene, camera).catch(() => {});
     narrator.audioContext();
     narrator.preload(bodies.map((b) => b.data.narration).filter(Boolean));
   }), 4000);
