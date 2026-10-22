@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [planet2]
+        group: [tails, tails-takes]
     steps:
       - uses: actions/checkout@v4
 
