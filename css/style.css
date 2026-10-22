@@ -483,3 +483,22 @@ body.leaving { opacity: 0; transition: opacity 0.35s ease-in; }
 .dev-settings select option { color: #000; }
 .dev-note { font-size: 12px; opacity: 0.75; margin: 4px 0 10px; }
 .dev-settings[hidden] { display: none; }
+
+/* גרעין של סרט צילום: רעש עדין שקופץ למקום אחר כמה פעמים בשנייה */
+.film-grain {
+  position: fixed;
+  inset: -64px;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  animation: grain-shift 0.5s steps(5) infinite;
+}
+@keyframes grain-shift {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-37px, 21px); }
+  40% { transform: translate(19px, -43px); }
+  60% { transform: translate(-11px, 33px); }
+  80% { transform: translate(41px, 9px); }
+  100% { transform: translate(0, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .film-grain { animation: none; } }
