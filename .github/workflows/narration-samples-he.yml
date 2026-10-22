@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [rings, rings-takes]
+        group: [gasgiant, gasgiant-takes]
     steps:
       - uses: actions/checkout@v4
 
