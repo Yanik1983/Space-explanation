@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ["200", "200-takes"]
+        group: [blanket, blanket-takes]
     steps:
       - uses: actions/checkout@v4
 
