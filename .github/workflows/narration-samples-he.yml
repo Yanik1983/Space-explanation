@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [tails2, spot4]
+        group: [spotA-takes, spotC-takes]
     steps:
       - uses: actions/checkout@v4
 
