@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [spotchunk]
+        group: [spotchunk, spotN-takes, spotG-takes]
     steps:
       - uses: actions/checkout@v4
 
