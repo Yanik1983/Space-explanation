@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [spotchunk, spotN-takes, spotG-takes]
+        group: [ketem-word, ketem]
     steps:
       - uses: actions/checkout@v4
 
