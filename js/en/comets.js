@@ -16,6 +16,7 @@ export const COMETS_INFO = {
     ['Where do they come from?', 'The far edges of the solar system'],
   ],
   funFact: 'When Earth passes through dust left behind by a comet, we see a night shower of "shooting stars"!',
+  bridge: 'On our way back in, we’ll meet visitors with glowing tails.',
   narration:
     'Comets are like giant, dirty snowballs: lumps of ice, dust, and rock that come from the far edges of the solar system. ' +
     'Most of the time they are frozen and dark. But when a comet gets close to the Sun, the heat warms it up, and its ice turns into gas. ' +

@@ -3141,6 +3141,26 @@ function startTour() {
   goToStep(0);
 }
 
+const flyFmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+let flyDist = null;
+function showFlyDistance(from, to) {
+  clearTimeout(flyDist?.hide);
+  flyDist = null;
+  $('fly-distance').classList.remove('show');
+  if (!from?.au || !to?.au || from === to || to.isBelt) return;
+  flyDist = { million: from.au.distanceTo(to.au) * 149.598 };
+  $('fly-distance').classList.add('show');
+}
+function updateFlyDistance() {
+  if (!flyDist || flyDist.hide) return;
+  const m = flyDist.million * (tween ? tween.e : 1);
+  const text = m >= 1000
+    ? tt(`${distFmt.format(m / 1000)} מיליארד ק"מ`, `${distFmt.format(m / 1000)} billion km`)
+    : tt(`${flyFmt.format(m)} מיליון ק"מ`, `${flyFmt.format(m)} million km`);
+  $('fly-distance').textContent = tt(`🚀 טסנו ${text}`, `🚀 We flew ${text}`);
+  if (!tween) flyDist.hide = setTimeout(() => $('fly-distance').classList.remove('show'), 1800);
+}
+
 function goToStep(i) {
   if (!tour) return;
   clearTimeout(tour.timer);
@@ -3151,6 +3171,10 @@ function goToStep(i) {
   $('tour-prev').disabled = tour.index === 0;
   $('tour-next').textContent = tour.index === tourSteps.length - 1 ? tt('סיום', 'Finish') : tt('הבא ←', 'Next →');
 
+  // מונה המרחק: כמה טסנו מהתחנה הקודמת (רק בין גופים שיש להם מקום במערכת השמש)
+  // (החגורה היא אזור ולא מקום אחד, ולכן מדלגים עליה: מצדק מודדים ממאדים)
+  showFlyDistance(tour.lastBody, step.body);
+  if (!step.body?.isBelt) tour.lastBody = step.body || null;
   if (step.body) {
     showBody(step.body);
   } else {
@@ -3163,9 +3187,24 @@ function goToStep(i) {
   const advance = () => {
     if (!tour) return;
     if (tour.index === tourSteps.length - 1) return; // בסוף נשארים על המסך האחרון
-    tour.timer = setTimeout(() => goToStep(tour.index + 1), 1800);
+    tour.timer = setTimeout(() => goToStep(tour.index + 1), 700);
   };
-  if (voiceOn) speakCurrent(advance);
+  // משפט המעבר נאמר בזמן הטיסה, וההסבר מתחיל רק אחרי שהגענו
+  const bridge = step.body?.data.bridge;
+  if (voiceOn && bridge) {
+    const index = tour.index;
+    setListening(true);
+    narrator.speak(bridge, {
+      onEnd: () => {
+        const go = () => {
+          if (tour?.index !== index) return;
+          if (tween) tour.timer = setTimeout(go, 100);
+          else speakCurrent(advance);
+        };
+        go();
+      },
+    });
+  } else if (voiceOn) speakCurrent(advance);
   else {
     stopSpeaking();
     if (show) playShowSilently();
@@ -3420,6 +3459,7 @@ function endTour() {
   clearTimeout(tour.timer);
   endShow();
   tour = null;
+  showFlyDistance(null, null);
   $('tourbar').hidden = true;
   document.body.classList.remove('touring');
   stopSpeaking();
@@ -3540,6 +3580,7 @@ function frame() {
   updateBlackHole(dt);
   updateLiveDistance();
   updateCamera(dt);
+  updateFlyDistance();
   controls.update();
   updateViewOffset(dt);
   camera.updateMatrixWorld();

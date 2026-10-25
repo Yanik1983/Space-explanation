@@ -11,6 +11,8 @@ const { COMETS, COMETS_INFO } = await import(dir + 'comets.js');
 
 const texts = [
   ...[...TOUR_INTRO, SUN, ...PLANETS, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY].map((d) => d.narration),
+  // משפטי המעבר של הסיור המודרך
+  ...[SUN, ...PLANETS, ASTEROID_BELT, GALAXY_MOTION, COMETS_INFO].map((d) => d.bridge).filter(Boolean),
   ...GLOSSARY.map((g) => g.text),
   CONTINUE_QUESTION,
   ...Object.values(MOONS).flat().map((m) => m.text),

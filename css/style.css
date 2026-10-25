@@ -324,6 +324,24 @@ body.term-open #panel { visibility: hidden; }
   white-space: nowrap;
 }
 .tourbar[hidden] { display: none; }
+/* מונה המרחק בזמן הטיסה בין תחנות בסיור */
+.fly-distance {
+  position: fixed;
+  bottom: 150px;
+  left: 50%;
+  transform: translate(-50%, 8px);
+  padding: 6px 14px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s, transform 0.5s;
+}
+.fly-distance.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* ---------- מסך פתיחה ---------- */
 .intro {
@@ -405,6 +423,7 @@ body.term-open #panel { visibility: hidden; }
   .narration { font-size: 16px; }
   /* בזמן סיור: סרגל הסיור יורד לתחתית במקום בורר כוכבי הלכת, כדי לא להסתיר את מערכת השמש */
   .tourbar { bottom: max(12px, env(safe-area-inset-bottom)); gap: 6px; padding: 6px 8px; }
+  .fly-distance { bottom: auto; top: calc(env(safe-area-inset-top) + 88px); font-size: 14px; }
   body.touring .chooser { display: none; }
   body.touring .panel { bottom: 70px; }
   body.panel-open .timebar { display: none; }

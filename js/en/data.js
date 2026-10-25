@@ -21,6 +21,7 @@ export const SUN = {
     ['Its light reaches us in', '8 minutes and 20 seconds'],
   ],
   funFact: 'You could fit about 1,300,000 Earths inside the Sun!',
+  bridge: 'Let’s start at the center, with the star that gives us light and warmth.',
   narration:
     'This is the Sun! The Sun is a star, just like the stars we see at night, only much closer to us. ' +
     'It is a giant ball of hot gas that lights up and warms the whole solar system. ' +
@@ -48,6 +49,7 @@ export const PLANETS = [
       ['Moons', 'None'],
     ],
     funFact: 'One day on Mercury (from sunrise to sunrise) is longer than a whole year there!',
+    bridge: 'Now let’s move a little away from the Sun, to its closest neighbor.',
     narration:
       'This is Mercury, the planet closest to the Sun, and also the smallest. ' +
       'It is the fastest of them all: it circles the Sun in just eighty-eight days. ' +
@@ -72,6 +74,7 @@ export const PLANETS = [
       ['Moons', 'None'],
     ],
     funFact: 'On Venus the Sun rises in the west and sets in the east, because it spins backwards!',
+    bridge: 'On we go. The next stop is wrapped in white clouds.',
     narration:
       'This is Venus, the brightest thing in the night sky after the Moon. It is almost the same size as Earth, but it is the hottest planet in the solar system. ' +
       'It is wrapped in thick clouds that trap the heat, like a very thick blanket, so it is even hotter there than on Mercury. ' +
@@ -96,6 +99,7 @@ export const PLANETS = [
       ['Moons', 'One – the Moon'],
     ],
     funFact: 'Right now, we are zooming around the Sun with Earth at about 30 kilometers per second!',
+    bridge: 'And now, a stop you know very well…',
     narration:
       'And this is Earth, our home! It is the only planet we know of that has life on it. ' +
       'Most of its surface is covered in water, so from space it looks blue. ' +
@@ -120,6 +124,7 @@ export const PLANETS = [
       ['Moons', 'Two – Phobos and Deimos'],
     ],
     funFact: 'Mars has the tallest mountain in the solar system – two and a half times taller than Everest!',
+    bridge: 'We leave home behind and fly to our red neighbor.',
     narration:
       'This is Mars, the red planet. It is red because its soil is full of rust, like an old nail. ' +
       'A day on Mars is almost exactly as long as ours, but a year there is almost twice as long. ' +
@@ -143,6 +148,7 @@ export const PLANETS = [
       ['Moons', 'More than 90'],
     ],
     funFact: 'Jupiter’s Great Red Spot is a giant storm that is bigger than the whole Earth!',
+    bridge: 'We made it past the rocks. Now get ready to meet a giant.',
     narration:
       'This is Jupiter, the biggest planet in the solar system. It is so big that all the other planets together would fit inside it. ' +
       'Jupiter has no ground to stand on, because it is made mostly of gases. ' +
@@ -168,6 +174,7 @@ export const PLANETS = [
       ['Moons', 'More than 270 – the most!'],
     ],
     funFact: 'Saturn is so light for its size that if you had a bathtub big enough, it would float!',
+    bridge: 'Next is its neighbor, which wears the prettiest jewelry in the Solar System.',
     narration:
       'This is Saturn, the planet with the famous rings. ' +
       'The rings are made of billions of pieces of ice and rock. Some are small as a grain of sand, and some are big as a house. ' +
@@ -192,6 +199,7 @@ export const PLANETS = [
       ['Moons', 'More than 25'],
     ],
     funFact: 'At the poles of Uranus there are 42 years of light followed by 42 years of darkness!',
+    bridge: 'From here the trip gets longer, and the Sun looks smaller and smaller.',
     narration:
       'This is Uranus, a light blue ice giant. Its color comes from a gas called methane. ' +
       'Uranus is very special: it is lying on its side! ' +
@@ -215,6 +223,7 @@ export const PLANETS = [
       ['Moons', 'More than 14, the biggest is Triton'],
     ],
     funFact: 'Neptune was discovered in 1846, and since then it has gone around the Sun only once!',
+    bridge: 'One more long jump, to the cold edge of the planets.',
     narration:
       'And this is Neptune, the planet farthest from the Sun. It is dark blue, very cold and very dark. ' +
       'Neptune has the strongest winds in the solar system, faster than a jet plane. ' +
@@ -239,6 +248,7 @@ export const PLANETS = [
       ['Moons', 'Five, the biggest is Charon'],
     ],
     funFact: 'Pluto has a huge bright heart-shaped area, discovered by the New Horizons spacecraft!',
+    bridge: 'But that’s not the end. Beyond Neptune, someone small is hiding.',
     narration:
       'And this is Pluto! It used to be called the ninth planet, but in two thousand and six scientists decided to call it a dwarf planet. ' +
       'It is very small, even smaller than our Moon, and in its neighborhood there are lots of other icy worlds like it. ' +
@@ -315,6 +325,7 @@ export const ASTEROID_BELT = {
     ['The biggest', 'Ceres, a dwarf planet 940 km across'],
   ],
   funFact: 'If we put all the asteroids in the belt together, we would get an object much smaller than our Moon!',
+  bridge: 'Careful! We’re coming to a zone full of rocks.',
   narration:
     'Between Mars and Jupiter is the asteroid belt. ' +
     'Asteroids are rocks that go around the Sun. Some are small as a pebble, and some are big as a mountain, or even as a city. ' +
@@ -337,6 +348,7 @@ export const GALAXY_MOTION = {
     ['How many trips so far?', 'About 20, since the solar system was born'],
   ],
   funFact: 'While you read this sentence, the solar system has already zoomed more than a thousand kilometers!',
+  bridge: 'Now let’s pull back and look at the whole Solar System together.',
   narration:
     'Here’s a surprising secret: the solar system is not standing still! The Sun is zooming through space, and all the planets zoom along with it. ' +
     'Do you see the glowing tail behind the Sun? It shows the path it travels as it flies forward. ' +
