@@ -1111,7 +1111,10 @@ function updateIsmGas(dt) {
 }
 initGalaxyMotion();
 // בתחנה הזאת המצלמה מסתובבת לבד; ברגע שהמשתמש גורר או מסובב – היא עוצרת
-controls.addEventListener('start', () => (motionCamFree = true));
+controls.addEventListener('start', () => {
+  motionCamFree = true;
+  drift = 0;
+});
 
 // ---------- שביל החלב מבחוץ ----------
 // הגלקסיה בנויה בקוד מכוכבים (ראו בהמשך) ומכוונת כמו הגלקסיה האמיתית: המרכז שלה בכיוון
@@ -2187,6 +2190,11 @@ const tmp = new THREE.Vector3();
 const lastFollowPos = new THREE.Vector3();
 let followBody = null;
 let tween = null;
+// המרחק של המצלמה מכל כוכב לכת, ביחס לרגיל
+const VIEW_DIST = { earth: 1.3, neptune: 1.4, pluto: 1.5 };
+// בסיור: המצלמה מקיפה את הכוכב לאט בזמן ההסבר (רדיאנים בשנייה), עד שנוגעים במסך
+let drift = 0, driftK = 0;
+const driftAxis = new THREE.Vector3(0, 1, 0);
 
 function overviewPosition() {
   const far = camera.aspect < 1 ? 2.3 : 1;
@@ -2197,6 +2205,7 @@ function overviewPosition() {
 
 function flyTo(body, duration = null, pose = null) {
   freeGalaxy = false;
+  drift = 0;
   const from = { pos: camera.position.clone(), target: controls.target.clone() };
   let offset;
   if (!body) {
@@ -2226,15 +2235,32 @@ function flyTo(body, duration = null, pose = null) {
     const r = body.group.position.length();
     offset = out.multiplyScalar(r * 0.55).add(new THREE.Vector3(0, r * 0.9, 0));
   } else if (body.isSun) {
-    offset = new THREE.Vector3(0, 9, 26).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
+    offset = new THREE.Vector3(0, 8, 22).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
   } else {
     // המצלמה מוצבת בין השמש לכוכב הלכת (בזווית), כדי לראות את הצד המואר
     // קרוב, כך שהכוכב ממלא חלק גדול מהמסך (כמו בצילום), ובזווית שבה רואים גם קצת מהצד של הלילה – הגבול בין יום ללילה
     // הוא מה שנותן לכדור נפח
-    const dist = (sizeOf(body) * (body.data.rings ? 5.2 : 3.6) + 0.6) * (camera.aspect < 1 ? 1.5 : 1);
+    const id = body.data.id;
+    const dist = (sizeOf(body) * (body.data.rings ? 5.2 : 3.6) + 0.6) * (camera.aspect < 1 ? 1.5 : 1) * (VIEW_DIST[id] ?? 1);
     const out = body.group.position.clone().normalize();
-    offset = out.negate().applyAxisAngle(new THREE.Vector3(0, 1, 0), 62 * DEG).multiplyScalar(dist);
+    offset = out.clone().negate().applyAxisAngle(UP, 62 * DEG).multiplyScalar(dist);
     offset.y = dist * 0.35;
+    if (id === 'saturn') {
+      // שבתאי: 35 מעלות מעל מישור הטבעות (ומהצד המואר שלהן), כדי שייראו פתוחות. הטבעות נוטות ביחס למסלול,
+      // ולכן מבט "מלמעלה" רגיל יכול לצאת כמעט מהצד
+      const pole = UP.clone().applyQuaternion(body.tilt.getWorldQuaternion(new THREE.Quaternion()));
+      if (pole.dot(out) > 0) pole.negate();
+      const flat = offset.clone().addScaledVector(pole, -offset.dot(pole)).normalize();
+      offset = flat.multiplyScalar(Math.cos(35 * DEG)).addScaledVector(pole, Math.sin(35 * DEG)).multiplyScalar(dist * 1.45);
+    }
+    if (id === 'uranus') {
+      // אורנוס מהצד: מסתכלים בניצב לציר שלו, כך שרואים שהוא שוכב (ובזווית קלה לכיוון השמש, כדי שיהיה מואר)
+      const pole = UP.clone().applyQuaternion(body.tilt.getWorldQuaternion(new THREE.Quaternion()));
+      const side = new THREE.Vector3().crossVectors(pole, UP).normalize();
+      if (side.dot(out) > 0) side.negate();
+      offset = side.addScaledVector(out, -0.55).normalize().multiplyScalar(dist);
+      offset.y = dist * 0.12;
+    }
   }
   // הטיסה: המרחק מהמצלמה למה שמסתכלים עליו משתנה בקצב קבוע ב"סדרי גודל" (לוגריתמי) – כמו זום –
   // ואם הדרך ארוכה, המצלמה קודם מתרחקת כדי לראות גם את נקודת ההתחלה וגם את היעד, ואז מתקרבת.
@@ -2297,6 +2323,11 @@ function updateCamera(dt) {
     tmp.subVectors(followBody.group.position, lastFollowPos);
     camera.position.add(tmp);
     controls.target.copy(followBody.group.position);
+    if (drift) {
+      driftK += (1 - driftK) * Math.min(1, dt * 0.4); // מתחיל בעדינות
+      tmp.subVectors(camera.position, controls.target).applyAxisAngle(driftAxis, drift * driftK * dt);
+      camera.position.copy(controls.target).add(tmp);
+    }
   }
   if (followBody) lastFollowPos.copy(followBody.group.position);
   // "נשימה" עדינה של המסגרת כשמסתכלים על כוכב לכת: זום קטן מאוד שעולה ויורד לאט, כמו מצלמה ביד – התמונה אף פעם לא קפואה
@@ -3177,6 +3208,14 @@ function goToStep(i) {
   if (!step.body?.isBelt) tour.lastBody = step.body || null;
   if (step.body) {
     showBody(step.body);
+    // הקפה איטית בזמן ההסבר, פעם לכיוון אחד ופעם לשני (באורנוס לא, כדי שיישאר המבט מהצד)
+    if (bodies.includes(step.body) && step.body.data.id !== 'uranus') {
+      drift = (tour.index % 2 ? 1 : -1) * 0.03;
+      driftK = 0;
+      // בשבתאי מקיפים סביב הציר שלו, כך שהזווית מעל הטבעות לא משתנה
+      if (step.body.data.rings) driftAxis.copy(UP).applyQuaternion(step.body.tilt.getWorldQuaternion(new THREE.Quaternion()));
+      else driftAxis.copy(UP);
+    }
   } else {
     markActive(null);
     flyTo(null);
@@ -3459,6 +3498,7 @@ function endTour() {
   clearTimeout(tour.timer);
   endShow();
   tour = null;
+  drift = 0;
   showFlyDistance(null, null);
   $('tourbar').hidden = true;
   document.body.classList.remove('touring');
