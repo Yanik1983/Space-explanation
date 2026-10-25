@@ -2336,13 +2336,13 @@ function flyTo(body, duration = null, pose = null) {
     const r = body.group.position.length();
     offset = out.multiplyScalar(r * 0.55).add(new THREE.Vector3(0, r * 0.9, 0));
   } else if (body.isSun) {
-    offset = new THREE.Vector3(0, 8, 22).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
+    offset = new THREE.Vector3(0, 9.2, 25.3).multiplyScalar(camera.aspect < 1 ? 1.6 : 1);
   } else {
     // המצלמה מוצבת בין השמש לכוכב הלכת (בזווית), כדי לראות את הצד המואר
     // קרוב, כך שהכוכב ממלא חלק גדול מהמסך (כמו בצילום), ובזווית שבה רואים גם קצת מהצד של הלילה – הגבול בין יום ללילה
     // הוא מה שנותן לכדור נפח
     const id = body.data.id;
-    const dist = (sizeOf(body) * (body.data.rings ? 5.2 : 3.6) + 0.6) * (camera.aspect < 1 ? 1.5 : 1) * (VIEW_DIST[id] ?? 1);
+    const dist = (sizeOf(body) * (body.data.rings ? 5.2 : 3.6) + 0.6) * (camera.aspect < 1 ? 1.5 : 1) * (VIEW_DIST[id] ?? 1) * 1.15;
     const out = body.group.position.clone().normalize();
     offset = out.clone().negate().applyAxisAngle(UP, 62 * DEG).multiplyScalar(dist);
     offset.y = dist * 0.35;
