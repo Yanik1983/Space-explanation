@@ -444,7 +444,7 @@ export class Presenter {
     this.camera.updateProjectionMatrix();
   }
 
-  // מחווה: 'wave' – נפנוף שלום, 'point' – הצבעה לכיוון חלון ההסבר, 'open' – ידיים פתוחות
+  // מחווה: 'wave' – נפנוף שלום, 'point' – הצבעה לכיוון חלון ההסבר, 'show' – הצבעה לצד השני (אל מה שמראים על המסך), 'open' – ידיים פתוחות
   play(gesture, duration = 2.2) {
     if (this.fallback) return this.fallback.play(gesture, duration);
     this.gesture = gesture;
@@ -515,6 +515,8 @@ export class Presenter {
         az = 14 * D; ax = -30 * D; e = 0; ey = 0; ez = (58 + Math.sin(t * 8) * 18) * D; curl = 0.04;
       } else if (g === 'point' && s === Math.sign(lookSide || -1)) {
         az = -s * 64 * D; ax = -56 * D; e = -62 * D; ey = s * 0.5; ez = 0; curl = 0.12;
+      } else if (g === 'show' && s === -Math.sign(lookSide || 1)) {
+        az = -s * 58 * D; ax = -72 * D; e = -40 * D; ey = s * 0.35; ez = 0; curl = 0.08;
       } else if (g === 'open') {
         az = -s * 66 * D; ax = -30 * D; e = -62 * D; ey = s * 0.1; ez = 0; curl = 0.1;
       }

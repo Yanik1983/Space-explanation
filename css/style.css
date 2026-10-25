@@ -324,6 +324,17 @@ body.term-open #panel { visibility: hidden; }
   white-space: nowrap;
 }
 .tourbar[hidden] { display: none; }
+/* כשהחלון מתחלף (תחנה חדשה): התוכן נכנס בהדרגה, חלק אחרי חלק */
+@media (prefers-reduced-motion: no-preference) {
+  .panel.swap > * { animation: panel-in 0.5s ease-out both; }
+  .panel.swap > :nth-child(3) { animation-delay: 0.06s; }
+  .panel.swap > :nth-child(n + 4) { animation-delay: 0.12s; }
+  .panel.swap > :nth-child(n + 7) { animation-delay: 0.2s; }
+}
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
 /* מונה המרחק בזמן הטיסה בין תחנות בסיור */
 .fly-distance {
   position: fixed;

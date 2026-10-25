@@ -2637,6 +2637,10 @@ function showPanel({ title, subtitle = '', color = null, text, facts = [], funFa
   );
   $('panel').scrollTop = 0;
   currentText = text;
+  // התוכן החדש נכנס בהדרגה, חלק אחרי חלק (ולא מתחלף בבת אחת)
+  $('panel').classList.remove('swap');
+  void $('panel').offsetWidth;
+  $('panel').classList.add('swap');
 }
 
 let currentText = '';
@@ -2654,6 +2658,9 @@ function speakCurrent(onEnd, from = 0) {
       currentSentence = i;
       runCue(i);
       setPlanetCue(spans[i]?.textContent || '');
+      // אופק מצביע על מה שמראים עכשיו, ופותח ידיים במשפט מפתיע (שנגמר ב־!)
+      if (cue) presenter.play('show', 2.6);
+      else if (i > 0 && /!\s*$/.test(spans[i]?.textContent || '')) presenter.play('open', 2);
       spans.forEach((s, j) => s.classList.toggle('speaking', i === j));
       // בחלון קטן (בטלפון) גוללים אל המשפט שמוקרא עכשיו
       spans[i]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
