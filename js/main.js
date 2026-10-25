@@ -34,9 +34,14 @@ const ATMOSPHERES = {
 const LOOK_K = { mercury: 0.8, venus: 0.95, earth: 1.05, mars: 0.85, jupiter: 0.6, saturn: 0.72, uranus: 1.0, neptune: 1.2, pluto: 0.9 };
 const FLOW = { jupiter: [0.012, 0.0005], saturn: [0.009, 0.00035], uranus: [0.005, 0.00015], neptune: [0.008, 0.0003] };
 // הסופה האדומה הגדולה של צדק: מקום במפה (u, v), ועוצמת הזוהר סביבה (0 = כבוי)
-const SPOT_OFF = { uSpot: { value: 0 }, uSpotUV: { value: new THREE.Vector2() } };
-const RED_SPOT = { uSpot: { value: 0 }, uSpotUV: { value: new THREE.Vector2(0.368, 0.382) } };
-let redSpotOn = false;
+// מקומות על פני כוכב לכת שזוהרים כשאופק מדבר עליהם: מרכז ורדיוס במפה (u, v), וצבע טבעת האור
+const spotU = (u, v, ru, rv, color) => ({ uSpot: { value: 0 }, uSpotUV: { value: new THREE.Vector2(u, v) }, uSpotR: { value: new THREE.Vector2(ru, rv) }, uSpotCol: { value: new THREE.Color(color) } });
+const SPOT_OFF = spotU(0, 0, 1, 1, '#000000');
+const SPOTS = {
+  jupiter: spotU(0.368, 0.382, 0.024, 0.034, '#ff6b1f'), // הסופה האדומה הגדולה
+  mars: spotU(0.127, 0.604, 0.02, 0.035, '#7fe0ff'), // הר הגעש אולימפוס
+  pluto: spotU(0.517, 0.578, 0.05, 0.09, '#ff8cc6'), // הלב
+};
 // uRight/uUp/uFwd: הצירים של המצלמה בתוך השמש (במערכת שמסתובבת איתה), כדי שהלהבות וההתפרצויות יהיו מקומות על השמש עצמה
 // ולא "מודבקות" למסך: כשמסובבים את המבט או כשהשמש מסתובבת, הן זזות איתה. uEd: הכיוון של כל התפרצות על השמש
 const sunErupt = { uE: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] }, uEd: { value: [new THREE.Vector3(1, 0, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(1, 0, 0)] }, uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uFwd: { value: new THREE.Vector3(0, 0, 1) } };
@@ -271,7 +276,7 @@ const LOOK = { uExposure: { value: 0.6 } };
 const LOOK_GLSL = `
   uniform float uExposure; uniform float uLookK; uniform float uFlow; uniform float uShear; uniform float uLookTime;
   uniform vec3 uOccPos; uniform float uOccR; varying vec3 vLookWP; uniform float uBands; uniform float uHaze;
-  uniform float uSpot; uniform vec2 uSpotUV;
+  uniform float uSpot; uniform vec2 uSpotUV; uniform vec2 uSpotR; uniform vec3 uSpotCol;
   float softNL(float x) { float t = clamp((x + 0.22) / 1.22, 0.0, 1.0); return t * smoothstep(0.0, 0.42, t); }
   vec3 lookTone(vec3 c) {
     // לפני הדחיסה: ערוץ צבע אחד שבורח למעלה (למשל אדום בצד המואר של מאדים) מתמזג קצת עם הבהירות, כדי שלא "ייחתך"
@@ -323,7 +328,6 @@ function photoLook(mat, { k = 1, flow = 0, shear = 0, occ = null, bands = 0, haz
     if (flow) {
       // פסים שזורמים: כל רוחב גאוגרפי זז בקצב קצת אחר (sin), ועוד עיוות רך של רעש שמשתנה לאט
       sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `
-        vec3 spotGlow = vec3(0.0);
         #ifdef USE_MAP
           vec2 fuv = vMapUv;
           fuv.x += sin(fuv.y * 22.0) * uShear * uLookTime;
@@ -335,14 +339,22 @@ function photoLook(mat, { k = 1, flow = 0, shear = 0, occ = null, bands = 0, haz
             float fineB = lookNoise(vec2(fuv.x * 6.0, fuv.y * 130.0)), broadB = lookNoise(vec2(fuv.x * 3.0 + 7.0, fuv.y * 46.0));
             diffuseColor.rgb *= 1.0 + ((fineB - 0.5) + 0.75 * (broadB - 0.5)) * uBands;
           }
-          // צדק: הסופה האדומה הגדולה זוהרת ומוקפת טבעת אור שפועמת (בזמן שאופק מדבר עליה)
+        #endif`);
+    }
+    if (spot) {
+      // מקום שאופק מדבר עליו (הסופה בצדק, אולימפוס, הלב של פלוטו) זוהר ומוקף טבעת אור שפועמת.
+      // המקום זז עם הפסים הזורמים (shear) כמו המפה עצמה
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        #ifdef USE_MAP
           if (uSpot > 0.0) {
-            vec2 sd = vec2(fract(fuv.x - uSpotUV.x + 0.5) - 0.5, fuv.y - uSpotUV.y) / vec2(0.024, 0.034);
+            vec2 suv = vMapUv;
+            suv.x += sin(suv.y * 22.0) * uShear * uLookTime;
+            vec2 sd = vec2(fract(suv.x - uSpotUV.x + 0.5) - 0.5, suv.y - uSpotUV.y) / uSpotR;
             float sr = length(sd), pulse = 0.5 + 0.5 * sin(uLookTime * 3.2);
             float core = smoothstep(1.15, 0.2, sr), ring = smoothstep(0.4, 0.0, abs(sr - 1.55 - pulse * 0.45));
-            spotGlow = (diffuseColor.rgb * core * (0.5 + 0.5 * pulse) + vec3(1.0, 0.42, 0.12) * ring * 0.8) * uSpot;
+            totalEmissiveRadiance += (diffuseColor.rgb * core * (0.5 + 0.5 * pulse) + uSpotCol * ring * 0.8) * uSpot;
           }
-        #endif`).replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += spotGlow;');
+        #endif`);
     }
     if (haze) {
       // מאדים: ערפל אבק חמים ודק שזז לאט על פני הכוכב (סופות אבק קטנות)
@@ -353,7 +365,7 @@ function photoLook(mat, { k = 1, flow = 0, shear = 0, occ = null, bands = 0, haz
         #endif`);
     }
   };
-  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|look${flow ? '-flow' : ''}${haze ? '-haze' : ''}`;
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|look${flow ? '-flow' : ''}${haze ? '-haze' : ''}${spot ? '-spot' : ''}`;
   mat.userData.occ = occU;
   return mat;
 }
@@ -580,6 +592,7 @@ function ringMaterial(uniforms) {
       }`,
     fragmentShader: `${LOGDEPTH_F[0]}
       uniform sampler2D map; uniform vec3 planetCenter; uniform float planetRadius; uniform vec3 ringNormal;
+      uniform float ringGlow; uniform float uTime;
       varying vec2 vUv; varying vec3 vWorld;
       void main() {
         ${LOGDEPTH_F[1]}
@@ -591,6 +604,10 @@ function ringMaterial(uniforms) {
         float sameSide = step(0.0, dot(toSun, ringNormal) * dot(cameraPosition - vWorld, ringNormal));
         float light = mix(0.4, 1.0, sameSide) * shadow;
         gl_FragColor = vec4(c.rgb * (0.1 + 0.9 * light), c.a);
+        // הבהקה: גל אור שעובר מהטבעת הפנימית אל החיצונית, וניצוצות קטנים
+        float wave = smoothstep(0.18, 0.0, abs(vUv.x - fract(uTime * 0.35)));
+        float sparkle = step(0.985, fract(sin(dot(floor(vWorld.xz * 40.0), vec2(12.9898, 78.233)) + floor(uTime * 6.0)) * 43758.5453));
+        gl_FragColor.rgb += c.rgb * ringGlow * (0.7 + 1.4 * wave + 2.0 * sparkle) * c.a;
         #include <colorspace_fragment>
       }`,
     transparent: true,
@@ -1916,6 +1933,8 @@ function createBody(data, isSun) {
       ringNormal: { value: poleVector(data.pole) },
       ringInner: { value: inner },
       ringOuter: { value: outer },
+      ringGlow: { value: 0 }, // הטבעות מבהיקות כשאופק מדבר עליהן
+      uTime: sunUniforms.uTime,
     };
     ringPhoto((tex) => (body.ringUniforms.map.value = tex));
     const ring = new THREE.Mesh(ringGeo, ringMaterial(body.ringUniforms));
@@ -1925,7 +1944,7 @@ function createBody(data, isSun) {
   }
   if (!isSun) {
     const [flow, shear] = FLOW[data.id] || [0, 0];
-    photoLook(mat, { k: LOOK_K[data.id] ?? 1, flow, shear, bands: data.id === 'saturn' ? 0.5 : 0, haze: data.id === 'mars' ? 0.12 : 0, spot: data.id === 'jupiter' ? RED_SPOT : null });
+    photoLook(mat, { k: LOOK_K[data.id] ?? 1, flow, shear, bands: data.id === 'saturn' ? 0.5 : 0, haze: data.id === 'mars' ? 0.12 : 0, spot: SPOTS[data.id] || null });
     if (clouds) photoLook(clouds.material);
   }
 
@@ -2133,15 +2152,97 @@ $('btn-today').addEventListener('click', () => {
 daysPerSecond = sliderToSpeed(+$('speed').value);
 updateSpeedLabel();
 
-// בזמן שמדברים על הסופה האדומה: צדק מסתובב כך שהסופה פונה אלינו, והיא זוהרת
+// ---------- אפקטים בזמן ההסבר על כוכב לכת ----------
+// כשמשפט מכיל אחת המילים, האפקט פועל עד סוף המשפט:
+// spot – המקום זוהר והכוכב מסתובב כך שהוא פונה אלינו; orbit – המסלול מואר; spin – הסיבוב מואץ לרגע (כדי לראות את הכיוון);
+// axis – קו הציר; moons – טבעת אור סביב הירחים; rings – הטבעות מבהיקות
+const PLANET_CUES = {
+  mercury: [[/מעוך|squished/, 'orbit']],
+  venus: [[/בכיוון הפוך|opposite direction/, 'spin']],
+  earth: [[/הציר|axis/, 'axis'], [/הירח|the Moon/, 'moons']],
+  mars: [[/אולימפוס|Olympus/, 'spot'], [/פובוס|Phobos/, 'moons']],
+  jupiter: [[/סופה ענקית|giant storm/, 'spot'], [/תשעים ירחים|ninety moons/, 'moons']],
+  saturn: [[/טבעות|rings/, 'rings']],
+  uranus: [[/על הצד|on its side/, 'axis']],
+  neptune: [[/טריטון|Triton/, 'moons']],
+  pluto: [[/המסלול|orbit/, 'orbit'], [/בצורת לב|heart/, 'spot']],
+};
+let cue = null; // { body, kind }
+function setPlanetCue(text) {
+  const hit = selected && PLANET_CUES[selected.data.id]?.find(([re]) => re.test(text));
+  cue = hit ? { body: selected, kind: hit[1] } : null;
+}
+const cueOn = (b, kind) => cue?.body === b && cue.kind === kind;
+
 const spotTmp = new THREE.Vector3();
-function turnToRedSpot(b, dt) {
-  if (redSpotOn && selected !== b) redSpotOn = false;
-  const u = RED_SPOT.uSpot;
-  u.value += ((redSpotOn ? 1 : 0) - u.value) * Math.min(1, dt * 2.5);
-  if (!redSpotOn) return false;
-  // המקום של הסופה על הכדור (הפסים זזים לאט עם הזמן, כמו בשיידר)
-  const uv = RED_SPOT.uSpotUV.value, [, shear] = FLOW.jupiter;
+const AXIS_COLOR = new THREE.Color('#9fdcff'), ORBIT_GLOW = new THREE.Color('#ffd166');
+const markerTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.strokeStyle = '#ffffff';
+  ctx.shadowColor = '#ffd27a';
+  ctx.shadowBlur = 10;
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.arc(64, 64, 46, 0, Math.PI * 2);
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+})();
+
+// מעדכן את האפקטים של כוכב לכת אחד. מחזיר true אם הסיבוב הרגיל שלו מושהה (כדי שהמקום הזוהר יפנה אלינו)
+function updateCueEffects(b, dt) {
+  if (cue && cue.body !== selected) cue = null;
+  const k = Math.min(1, dt * 2.5);
+  const fx = (b.fx ??= { axis: 0, moons: 0, orbit: 0 });
+  const pulse = 0.75 + 0.25 * Math.sin(sunUniforms.uTime.value * 3.2);
+  // קו הציר: נוצר רק בפעם הראשונה שצריך אותו
+  fx.axis += ((cueOn(b, 'axis') ? 1 : 0) - fx.axis) * k;
+  if (fx.axis > 0.01 && !b.axisLine) {
+    // מוט דק וזוהר שעובר דרך הקטבים ובולט משני הצדדים
+    b.axisLine = new THREE.Mesh(
+      new THREE.CylinderGeometry(b.data.size * 0.025, b.data.size * 0.025, b.data.size * 3.2, 12),
+      new THREE.MeshBasicMaterial({ color: AXIS_COLOR, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
+    );
+    b.tilt.add(b.axisLine);
+  }
+  if (b.axisLine) {
+    b.axisLine.visible = fx.axis > 0.01;
+    b.axisLine.material.opacity = fx.axis * pulse;
+  }
+  // טבעת אור סביב כל ירח
+  fx.moons += ((cueOn(b, 'moons') ? 1 : 0) - fx.moons) * k;
+  for (const m of b.moons) {
+    if (!m.mesh) continue;
+    if (fx.moons > 0.01 && !m.marker) {
+      m.marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: markerTex, transparent: true, depthWrite: false, opacity: 0 }));
+      m.marker.scale.setScalar((m.mesh.geometry.parameters.radius || 0.3) * 4.5);
+      m.mesh.add(m.marker);
+    }
+    if (m.marker) {
+      m.marker.visible = fx.moons > 0.01;
+      m.marker.material.opacity = fx.moons * pulse;
+    }
+  }
+  // המסלול מואר בזהב
+  fx.orbit += ((cueOn(b, 'orbit') ? 1 : 0) - fx.orbit) * k;
+  if (b.orbitLine) {
+    b.orbitColor ??= b.orbitLine.material.color.clone();
+    b.orbitLine.material.color.copy(b.orbitColor).lerp(ORBIT_GLOW, fx.orbit * pulse);
+  }
+  if (b.ringUniforms) b.ringUniforms.ringGlow.value += ((cueOn(b, 'rings') ? 1 : 0) - b.ringUniforms.ringGlow.value) * k;
+  // סיבוב מואץ לרגע (נוגה: רואים שהיא מסתובבת הפוך)
+  if (cueOn(b, 'spin')) b.spin += Math.sign(b.data.rotation) * 1.2 * dt;
+  // המקום הזוהר: הכוכב מסתובב כך שהמקום פונה אלינו, ונעצר שם
+  const spot = SPOTS[b.data.id];
+  if (!spot) return false;
+  const on = cueOn(b, 'spot');
+  spot.uSpot.value += ((on ? 1 : 0) - spot.uSpot.value) * k;
+  if (!on) return false;
+  // המקום של הנקודה על הכדור (הפסים זזים לאט עם הזמן, כמו בשיידר)
+  const uv = spot.uSpotUV.value, shear = FLOW[b.data.id]?.[1] ?? 0;
   const phi = (uv.x - Math.sin(uv.y * 22) * shear * sunUniforms.uTime.value) * Math.PI * 2;
   b.tilt.worldToLocal(spotTmp.copy(camera.position));
   const target = Math.atan2(spotTmp.x, spotTmp.z) - Math.atan2(-Math.cos(phi), Math.sin(phi));
@@ -2159,8 +2260,8 @@ function updateBodies(dt) {
       toDisplayOrbit(b.au, b.semiA, b.group.position);
     }
     b.group.scale.setScalar(1 + ((b.isSun ? REAL_SIZE.sun : REAL_SIZE.planet) - 1) * scaleMix);
-    // בזמן שמדברים על הסופה האדומה, צדק לא מסתובב כרגיל אלא נעצר כשהסופה פונה אלינו
-    const held = d.id === 'jupiter' && turnToRedSpot(b, dt);
+    // בזמן שמדברים על מקום מסוים בכוכב (למשל הסופה בצדק), הוא לא מסתובב כרגיל אלא נעצר כשהמקום פונה אלינו
+    const held = !b.isSun && updateCueEffects(b, dt);
     if (timeRuns() && !held) {
       const omega = ((2 * Math.PI) / d.rotation) * simSpeed();
       b.spin += Math.sign(omega) * Math.min(Math.abs(omega), MAX_SPIN) * dt;
@@ -2552,13 +2653,13 @@ function speakCurrent(onEnd, from = 0) {
       const i = k + from;
       currentSentence = i;
       runCue(i);
-      redSpotOn = selected?.data.id === 'jupiter' && /סופה ענקית|giant storm/.test(spans[i]?.textContent || '');
+      setPlanetCue(spans[i]?.textContent || '');
       spans.forEach((s, j) => s.classList.toggle('speaking', i === j));
       // בחלון קטן (בטלפון) גוללים אל המשפט שמוקרא עכשיו
       spans[i]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
     onEnd: () => {
-      redSpotOn = false;
+      cue = null;
       spans.forEach((s) => s.classList.remove('speaking'));
       setListening(false);
       onEnd?.();
@@ -2568,7 +2669,7 @@ function speakCurrent(onEnd, from = 0) {
 
 function stopSpeaking() {
   narrator.stop();
-  redSpotOn = false;
+  cue = null;
   $('panel-text').querySelectorAll('span').forEach((s) => s.classList.remove('speaking'));
   setListening(false);
 }
