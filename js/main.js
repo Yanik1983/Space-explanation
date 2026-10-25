@@ -1837,14 +1837,20 @@ const blackHole = (() => {
           if (dot(p, p) > R_OUT * R_OUT && dot(p, v) > 0.0) break;
         }
         if (!fell && trans > 0.0) col += trans * sky(normalize(mix(v, dir, edgeK)));
-        gl_FragColor = vec4(col, uOpacity);
+        // רחוק מהחור (קרניים שעוברות רחוק ממנו כמעט לא מתעקמות) הכדור שקוף, ורואים את השמיים האמיתיים שמאחוריו.
+        // כך אין "עיגול" עם גבול כשהשמיים שמסביב שונים (למשל בטיסה אל שביל החלב וממנו)
+        float near = 1.0 - smoothstep(0.35 * R_OUT, 0.9 * R_OUT, sqrt(h2));
+        float a = fell ? 1.0 : max(near, 1.0 - trans);
+        gl_FragColor = vec4(col, uOpacity * a);
         #include <colorspace_fragment>
       }`,
     side: THREE.BackSide,
     transparent: true,
-    depthWrite: true,
+    // לא כותב עומק, ומצויר אחרי הכוכבים: כך הכוכבים שמאחורי הכדור לא נעלמים (אחרת רואים עיגול כהה)
+    depthWrite: false,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(BH_R, 64, 32), mat);
+  mesh.renderOrder = 10;
   mesh.visible = false;
   mesh.frustumCulled = false;
   g.add(mesh);
@@ -1858,11 +1864,12 @@ function updateBlackHole(dt) {
   if (!blackHole.mesh.visible) return;
   const u = blackHole.mat.uniforms;
   const t = performance.now() / 1000;
-  u.uOpacity.value = bhMix;
   u.uTime.value = t;
   blackHole.mesh.updateMatrixWorld();
   u.uCam.value.copy(camera.position);
   blackHole.mesh.worldToLocal(u.uCam.value);
+  // החור מופיע רק כשמתקרבים אליו (ונעלם כשמתרחקים), ולא כעיגול כהה מרחוק
+  u.uOpacity.value = bhMix * (1 - THREE.MathUtils.smoothstep(u.uCam.value.length(), BH_R * 0.9, BH_R * 2.5));
   u.uToWorld.value.setFromMatrix4(blackHole.mesh.matrixWorld).multiplyScalar(1 / BH_RS);
   // מפת השמיים של שביל החלב, והסיבוב מכיוון בעולם לכיוון על המפה (ההפך מהסיבוב של הכדור הגדול)
   u.uDome.value = milky.skyDome.material.map;
