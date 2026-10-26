@@ -2311,6 +2311,18 @@ function overviewPosition() {
   return compressed.lerp(real, scaleMix).multiplyScalar(far);
 }
 
+// התקדמות בטיסה עם "הפלגה": מאיצים בעדינות במשך ramp שניות, טסים בקצב קבוע, ומאטים באותה צורה (סה"כ total שניות).
+// מקבל את החלק מהזמן (0..1) ומחזיר את החלק מהדרך (0..1)
+function cruiseEase(total, ramp) {
+  const v = 1 / (total - ramp); // הקצב בהפלגה, כך שכל הדרך = 1
+  const up = (s) => {
+    if (s >= ramp) return (v * ramp) / 2 + v * (s - ramp);
+    const u = s / ramp;
+    return v * ramp * (u * u * u - (u * u * u * u) / 2);
+  };
+  return (t) => (t <= 0.5 ? up(t * total) : 1 - up((1 - t) * total));
+}
+
 function flyTo(body, duration = null, pose = null) {
   freeGalaxy = false;
   drift = 0;
@@ -2388,12 +2400,15 @@ function flyTo(body, duration = null, pose = null) {
   for (let i = 1; i <= 64; i++) cum.push(cum[i - 1] + Math.exp(logR((i - 0.5) / 64)));
   const along = cum.map((v) => v / cum[64]);
   const zoom = Math.abs(lb - la) + 2 * (lc - (la + lb) / 2);
+  // אל החור השחור וממנו: טיסה ארוכה יותר, שבה רק האמצע (ההפלגה בין הכוכבים, הרחק ממערכת השמש) מתארך –
+  // ההתחלה והסוף באותה מהירות כמו בטיסה רגילה
+  const cruise = body?.isBlackHole || followBody?.isBlackHole ? cruiseEase(7.5, 1.2) : null;
   tween = {
-    from, offset, body, pose, t: 0, e: 0, logR, along,
+    from, offset, body, pose, t: 0, e: 0, logR, along, cruise,
     milky: body === milkyInfo || followBody === milkyInfo,
     avoid: Math.min(sizeOf(sun) * 5, toPos.length() * 0.9),
     dir0: from.pos.clone().sub(from.target).divideScalar(r0),
-    duration: duration ?? Math.min(4.5, 1.6 + 0.12 * zoom + Math.min(0.8, travel / 1500)),
+    duration: duration ?? (cruise ? 7.5 : Math.min(4.5, 1.6 + 0.12 * zoom + Math.min(0.8, travel / 1500))),
   };
   followBody = body;
   controls.enabled = false;
@@ -2405,7 +2420,7 @@ function updateCamera(dt) {
   if (tween) {
     tween.t = Math.min(1, tween.t + dt / tween.duration);
     const t = tween.t;
-    const e = (tween.e = t * t * t * (t * (6 * t - 15) + 10)); // התחלה וסיום רכים מאוד
+    const e = (tween.e = tween.cruise ? tween.cruise(t) : t * t * t * (t * (6 * t - 15) + 10)); // התחלה וסיום רכים מאוד
     const targetPos = tween.body ? tween.body.group.position : ORIGIN;
     const camPos = tween.body ? tmp.copy(targetPos).add(tween.offset) : tween.pose ? tween.pose() : overviewPosition();
     // היעד עשוי לזוז בזמן הטיסה (כוכב לכת מסתובב), ולכן הכיוון והמרחק בסוף מחושבים מחדש בכל פריים
