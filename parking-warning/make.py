@@ -20,6 +20,7 @@ from generate_audio import trim_silence  # noqa: E402
 
 TEXT = "החניה עדיין פעילה. לא לשכוח לעצור אותה."
 VOICE = "calm adult man in his thirties, deep clear voice, friendly but serious, moderate pace"
+FEMALE_VOICE = "calm adult woman in her thirties, clear warm voice, friendly but serious, moderate pace"
 
 
 def save(wav, sr, name):
@@ -36,6 +37,15 @@ def main():
     from voxcpm import VoxCPM
     model = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False, optimize=False, device="cpu")
     sr = model.tts_model.sample_rate
+    if "female" in sys.argv[1:]:
+        # female1-3: voice design of a woman's voice, seeds 11, 12, 13 (the male takes are left as they are)
+        for i, seed in enumerate([11, 12, 13], 1):
+            torch.manual_seed(seed)
+            wav = model.generate(text=f"({FEMALE_VOICE}){TEXT}", cfg_value=2.0, inference_timesteps=10)
+            save(wav, sr, f"female{i}")
+        for w in ROOT.glob("*.wav"):
+            w.unlink()
+        return
     for i, seed in enumerate([1, 2, 3], 1):
         torch.manual_seed(seed)
         wav = model.generate(text=f"({VOICE}){TEXT}", cfg_value=2.0, inference_timesteps=10)

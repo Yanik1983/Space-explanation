@@ -32,7 +32,7 @@ jobs:
         run: |
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install voxcpm soundfile
-      - run: python3 parking-warning/make.py
+      - run: python3 parking-warning/make.py female
       - name: Write versions
         run: |
           {
