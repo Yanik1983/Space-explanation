@@ -1,0 +1,49 @@
+# Parking Guard: generates parking-warning/take*.ogg/.mp3 (VoxCPM2) and commits them to this branch only.
+name: Parking warning voice
+
+on:
+  push:
+    branches: [tts-parking-warning]
+    paths:
+      - parking-warning/make.py
+      - .github/workflows/parking-warning.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.ref_name == 'tts-parking-warning'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: voxcpm2-model-v1
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        timeout-minutes: 10
+      - name: Install VoxCPM (CPU)
+        run: |
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install voxcpm soundfile
+      - run: python3 parking-warning/make.py
+      - name: Write versions
+        run: |
+          {
+            echo "python: $(python3 --version)"
+            pip show voxcpm torch | grep -E '^(Name|Version)'
+            ffmpeg -version | head -1
+          } > parking-warning/versions.txt
+      - name: Commit
+        run: |
+          git add parking-warning
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Parking warning voice takes" || exit 0
+          git push origin "HEAD:tts-parking-warning"
