@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT.parent / "tools"))
 from generate_audio import trim_silence  # noqa: E402
 
 TEXT = "החניה עדיין פעילה. לא לשכוח לעצור אותה."
+EN_TEXT = "Your parking is still on. Remember to stop it."
 VOICE = "calm adult man in his thirties, deep clear voice, friendly but serious, moderate pace"
 FEMALE_VOICE = "calm adult woman in her thirties, clear warm voice, friendly but serious, moderate pace"
 
@@ -37,6 +38,19 @@ def main():
     from voxcpm import VoxCPM
     model = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False, optimize=False, device="cpu")
     sr = model.tts_model.sample_rate
+    if "en" in sys.argv[1:]:
+        # English: the voices of take1 (male) and female1 (female), cloned from those files.
+        # Only the timbre is taken from the reference (no Hebrew prompt text), so the model speaks English naturally
+        for name, ref_src, seeds in [("en_male", "take1.ogg", [21, 22, 23]), ("en_female", "female1.ogg", [31, 32, 33])]:
+            ref = ROOT / f"ref-{name}.wav"
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(ROOT / ref_src), "-ac", "1", str(ref)], check=True)
+            for i, seed in enumerate(seeds, 1):
+                torch.manual_seed(seed)
+                wav = model.generate(text=EN_TEXT, reference_wav_path=str(ref), cfg_value=2.0, inference_timesteps=10)
+                save(wav, sr, f"{name}{i}")
+        for w in ROOT.glob("*.wav"):
+            w.unlink()
+        return
     if "female" in sys.argv[1:]:
         # female1-3: voice design of a woman's voice, seeds 11, 12, 13 (the male takes are left as they are)
         for i, seed in enumerate([11, 12, 13], 1):
