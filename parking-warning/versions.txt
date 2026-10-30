@@ -1,0 +1,6 @@
+python: Python 3.12.15
+Name: voxcpm
+Version: 2.0.3
+Name: torch
+Version: 2.15.0+cpu
+ffmpeg version 8.0.1-3ubuntu2 Copyright (c) 2000-2025 the FFmpeg developers
