@@ -537,3 +537,9 @@ body.leaving { opacity: 0; transition: opacity 0.35s ease-in; }
 .motion-speed-btn { margin-top: 4px; }
 .label.voyager-label { color: #eaf6ff; border-color: rgba(140, 220, 255, 0.7); }
 .label.centre-label { color: #ffd9a8; border-color: rgba(255, 179, 71, 0.6); pointer-events: none; }
+
+/* אורך ההסברים (קצרים / מלאים) – במסך הפתיחה ובהגדרות */
+.mode-toggle { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; font-size: 14px; }
+.settings .mode-toggle { justify-content: flex-start; margin: 12px 0 4px; }
+.panel .more { margin: 2px 0 10px; }
+.panel .more[hidden] { display: none; }

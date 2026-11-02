@@ -2629,15 +2629,30 @@ $('btn-guide').addEventListener('click', () => {
 });
 let selected = null;
 
-function showPanel({ title, subtitle = '', color = null, text, facts = [], funFact = '' }) {
-  $('panel').hidden = false;
-  document.body.classList.add('panel-open');
-  $('panel-title').textContent = title;
-  $('panel-subtitle').textContent = subtitle;
-  $('panel-dot').style.display = color ? '' : 'none';
-  $('panel-dot').style.background = color || '';
-  dismissTerm();
-  hideAsk();
+// מצב קצר (ברירת המחדל): בכל תחנה מוקראים רק המשפטים שב־short, ובחלון יש כפתור "לשמוע עוד" שמוסיף את השאר.
+// הבחירה נשמרת בדפדפן
+let shortMode = true;
+try {
+  shortMode = localStorage.getItem('narrationLength') !== 'full';
+} catch {}
+function setShortMode(on) {
+  shortMode = on;
+  try {
+    localStorage.setItem('narrationLength', on ? 'short' : 'full');
+  } catch {}
+  for (const b of document.querySelectorAll('.mode-toggle [data-mode]')) {
+    const pressed = (b.dataset.mode === 'short') === on;
+    b.classList.toggle('btn-primary', pressed);
+    b.setAttribute('aria-pressed', String(pressed));
+  }
+}
+for (const b of document.querySelectorAll('.mode-toggle [data-mode]')) b.addEventListener('click', () => setShortMode(b.dataset.mode === 'short'));
+setShortMode(shortMode);
+
+let panelFull = null; // ההסבר המלא, כשבחלון מוצג רק הקצר
+let currentShortIdx = null; // המספרים (בהסבר המלא) של המשפטים שמוצגים, במצב קצר
+
+function renderPanelText(text, funFact) {
   const used = new Set();
   $('panel-text').replaceChildren(
     ...splitSentences(text).flatMap((s) => {
@@ -2647,6 +2662,24 @@ function showPanel({ title, subtitle = '', color = null, text, facts = [], funFa
     }),
   );
   $('panel-fun').replaceChildren(...linkTerms(funFact, used));
+}
+
+function showPanel({ title, subtitle = '', color = null, text, short = null, facts = [], funFact = '' }) {
+  $('panel').hidden = false;
+  document.body.classList.add('panel-open');
+  $('panel-title').textContent = title;
+  $('panel-subtitle').textContent = subtitle;
+  $('panel-dot').style.display = color ? '' : 'none';
+  $('panel-dot').style.background = color || '';
+  dismissTerm();
+  hideAsk();
+  const all = splitSentences(text);
+  const useShort = shortMode && short?.length && short.length < all.length;
+  panelFull = useShort ? { text, all, short, funFact } : null;
+  currentShortIdx = useShort ? short : null;
+  if (useShort) text = short.map((i) => all[i]).join(' ');
+  renderPanelText(text, funFact);
+  $('panel-more').hidden = !useShort;
   $('panel-moons').hidden = true;
   $('panel-facts').replaceChildren(
     ...facts.flatMap(([k, v]) => {
@@ -2670,13 +2703,16 @@ let currentSentence = 0;
 let lastOnEnd = null;
 
 // מקריא את ההסבר שבחלון, מהמשפט from והלאה (כדי שאפשר יהיה להמשיך אחרי הסבר של מושג)
+// from: מספר המשפט שממנו מתחילים, או רשימה של המשפטים להקריא
 function speakCurrent(onEnd, from = 0) {
   const spans = [...$('panel-text').querySelectorAll(':scope > span')];
+  const all = splitSentences(currentText);
+  const idx = Array.isArray(from) ? from : all.map((_, i) => i).slice(from);
   lastOnEnd = onEnd;
   setListening(true);
-  narrator.speak(splitSentences(currentText).slice(from).join(' '), {
+  narrator.speak(idx.map((i) => all[i]).join(' '), {
     onSentence: (k) => {
-      const i = k + from;
+      const i = idx[k];
       currentSentence = i;
       runCue(i);
       setPlanetCue(spans[i]?.textContent || '');
@@ -2695,6 +2731,23 @@ function speakCurrent(onEnd, from = 0) {
     },
   });
 }
+
+// "לשמוע עוד": מציגים את ההסבר המלא, ואופק מקריא רק את המשפטים שעוד לא נאמרו. בסיור – אחר כך ממשיכים לתחנה הבאה
+function showMore() {
+  if (!panelFull) return;
+  const { text, all, short, funFact } = panelFull;
+  const onEnd = lastOnEnd;
+  if (tour) clearTimeout(tour.timer);
+  stopSpeaking();
+  panelFull = null;
+  currentShortIdx = null;
+  currentText = text;
+  renderPanelText(text, funFact);
+  $('panel-more').hidden = true;
+  const rest = all.map((_, i) => i).filter((i) => !short.includes(i));
+  if (voiceOn) speakCurrent(onEnd, rest);
+}
+$('panel-more').addEventListener('click', showMore);
 
 function stopSpeaking() {
   narrator.stop();
@@ -3055,14 +3108,14 @@ function showBody(body) {
     presenter.play('open', 2.6);
     flyTo(milkyInfo, 5);
     const d = MILKY_WAY;
-    return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+    return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, short: d.short, facts: d.facts, funFact: d.funFact });
   }
   if (body === blackHoleInfo) {
     markActive(blackHoleInfo);
     presenter.play('open', 2.6);
     flyTo(blackHoleInfo, 7);
     const d = BLACK_HOLE;
-    return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+    return showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, short: d.short, facts: d.facts, funFact: d.funFact });
   }
   if (body === galaxyInfo) {
     motionCamFree = false;
@@ -3070,7 +3123,7 @@ function showBody(body) {
     presenter.play('open', 2.6);
     flyTo(galaxyInfo, 3);
     const d = GALAXY_MOTION;
-    showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+    showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, short: d.short, facts: d.facts, funFact: d.funFact });
     // כפתור המהירות בתוך חלון ההסבר (כך הוא לא מסתיר את התוויות על המסך)
     speedBtn.hidden = false;
     $('panel-moons').replaceChildren(speedBtn);
@@ -3081,7 +3134,7 @@ function showBody(body) {
   markActive(body);
   presenter.play('point', 2.4);
   flyTo(body);
-  showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+  showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, short: d.short, facts: d.facts, funFact: d.funFact });
   if (body.moons.length) {
     const h = document.createElement('h3');
     h.textContent = body.moons.length === 1 ? tt('🌙 לחצו כדי לשמוע על הירח:', '🌙 Tap to hear about the moon:') : tt(`🌙 הירחים החשובים של ${d.name}:`, `🌙 The important moons of ${d.name}:`);
@@ -3107,7 +3160,7 @@ function showComets() {
   markActive(cometsInfo);
   presenter.play('point', 2.4);
   flyTo(nearest);
-  showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, facts: d.facts, funFact: d.funFact });
+  showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, short: d.short, facts: d.facts, funFact: d.funFact });
   const h = document.createElement('h3');
   h.textContent = tt('☄️ שביטים מפורסמים:', '☄️ Famous comets:');
   const list = document.createElement('div');
@@ -3350,7 +3403,7 @@ function goToStep(i) {
     markActive(null);
     flyTo(null);
     presenter.play(step.intro === TOUR_OUTRO ? 'wave' : 'open', 2.6);
-    showPanel({ title: step.intro.title, text: step.intro.narration });
+    showPanel({ title: step.intro.title, text: step.intro.narration, short: step.intro.short });
     if (INTRO_CUES[step.intro.id]) startShow(INTRO_CUES[step.intro.id]);
   }
   const advance = () => {
@@ -3609,6 +3662,7 @@ function endShow() {
 
 function runCue(i) {
   if (!show) return;
+  if (currentShortIdx) i = currentShortIdx[i]; // במצב קצר: המספר של המשפט בהסבר המלא
   if (i === 0) clearShowEffects();
   show.cues[i]?.();
 }
