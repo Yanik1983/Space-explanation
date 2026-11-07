@@ -114,7 +114,7 @@ def v2_chunks(sentence):
 def set_lang(lang):
     global LANG, AUDIO
     LANG = lang
-    AUDIO = ROOT / "audio" / "en" if lang == "en" else ROOT / "audio"
+    AUDIO = ROOT / "audio" if lang == "he" else ROOT / "audio" / lang
 
 
 # הגייה: מילים שהמודל מבטא לא נכון מוקלטות בכתיבה מנוקדת. הטקסט שמוצג באתר לא משתנה.
@@ -237,8 +237,8 @@ class VoxCPMEngine:
         self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|punct{COMMA_PAUSE}-{END_PAUSE}-{MIN_CHUNK}"
         if style == "v2":
             self.settings = f"voxcpm2|{ref_hash}|seed{VOXCPM_SEED}|v2b-{V2_LONG}-{V2_COMMA_PAUSE}"
-        if LANG == "en":
-            self.settings += "|en|noam-heb"
+        if LANG != "he":
+            self.settings += f"|{LANG}|noam-heb"
         self.model = None  # נטען רק כשבאמת צריך ליצור קול (לא ב־--finalize)
 
     async def save(self, sentence, path, chunks=None, seed=None):
@@ -258,7 +258,7 @@ class VoxCPMEngine:
         for i, chunk in enumerate(chunks or (v2_chunks(sentence) if v2 else comma_chunks(sentence))):
             torch.manual_seed(VOXCPM_SEED if seed is None else seed)
             chunk = spoken(chunk)
-            if LANG == "en":
+            if LANG != "he":
                 chunk = chunk.replace("Ofek", "אופק")  # באנגלית השם נשמע לא נכון; בכתיבה עברית הוא מבוטא כמו שאופק אומר אותו
                 # קול של אופק בשפה אחרת: רק הדגימה כהתייחסות לגוון, בלי להמשיך את הטקסט העברי שלה
                 wav = self.model.generate(text=chunk, reference_wav_path=str(VOXCPM_REF),
@@ -306,7 +306,7 @@ async def pick_engine(args):
 
 async def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--lang", choices=["he", "en"], default="he", help="שפת ההקראה")
+    p.add_argument("--lang", choices=["he", "en", "ru"], default="he", help="שפת ההקראה")
     p.add_argument("--engine", choices=["auto", "edge", "phonikud", "voxcpm"], default="auto")
     p.add_argument("--voice", default=EDGE_VOICE, help="קול של edge")
     p.add_argument("--pitch", default=EDGE_PITCH, help="טון של edge, למשל +20Hz")
