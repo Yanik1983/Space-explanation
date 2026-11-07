@@ -7,8 +7,8 @@ import fs from 'fs';
 import path from 'path';
 
 const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
-// דפי ה־HTML: עברית ואנגלית (en/index.html משתמש ב־<base href="../">, ולכן הנתיבים בו זהים)
-const files = ['index.html', 'en/index.html'].map((f) => path.join(root, f));
+// דפי ה־HTML: עברית, אנגלית ורוסית (en/ ו־ru/ משתמשים ב־<base href="../">, ולכן הנתיבים בהם זהים)
+const files = ['index.html', 'en/index.html', 'ru/index.html'].map((f) => path.join(root, f));
 const d = new Date();
 const pad = (n) => String(n).padStart(2, '0');
 const v = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}`;
@@ -19,7 +19,7 @@ for (const file of files) {
   html = html.replace(/(<script type="importmap">\s*)([\s\S]*?)(\s*<\/script>)/, (all, a, json, b) => {
     const map = JSON.parse(json);
     for (const k of Object.keys(map.imports)) if (k.startsWith('./js/')) delete map.imports[k];
-    for (const dir of ['js', 'js/en']) {
+    for (const dir of ['js', 'js/en', 'js/ru']) {
       for (const f of fs.readdirSync(path.join(root, dir)).filter((f) => f.endsWith('.js')).sort()) {
         map.imports[`./${dir}/${f}`] = `./${dir}/${f}?v=${v}`;
       }

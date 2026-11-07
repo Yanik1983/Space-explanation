@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ru" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <base href="../">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Путешествие по Солнечной системе</title>
+  <meta name="description" content="Солнечная система в 3D с объяснениями вслух на русском, для детей и всей семьи">
+  <meta name="theme-color" content="#05060f">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🪐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=20261107-1256">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/",
+        "./js/comets.js": "./js/comets.js?v=20261107-1256",
+        "./js/content.js": "./js/content.js?v=20261107-1256",
+        "./js/data.js": "./js/data.js?v=20261107-1256",
+        "./js/galaxy.js": "./js/galaxy.js?v=20261107-1256",
+        "./js/glossary.js": "./js/glossary.js?v=20261107-1256",
+        "./js/i18n.js": "./js/i18n.js?v=20261107-1256",
+        "./js/kid-presenter.js": "./js/kid-presenter.js?v=20261107-1256",
+        "./js/main.js": "./js/main.js?v=20261107-1256",
+        "./js/moons.js": "./js/moons.js?v=20261107-1256",
+        "./js/orbits.js": "./js/orbits.js?v=20261107-1256",
+        "./js/photo-galaxy.js": "./js/photo-galaxy.js?v=20261107-1256",
+        "./js/presenter.js": "./js/presenter.js?v=20261107-1256",
+        "./js/speech.js": "./js/speech.js?v=20261107-1256",
+        "./js/texgen.js": "./js/texgen.js?v=20261107-1256",
+        "./js/texture-worker.js": "./js/texture-worker.js?v=20261107-1256",
+        "./js/textures.js": "./js/textures.js?v=20261107-1256",
+        "./js/en/comets.js": "./js/en/comets.js?v=20261107-1256",
+        "./js/en/data.js": "./js/en/data.js?v=20261107-1256",
+        "./js/en/glossary.js": "./js/en/glossary.js?v=20261107-1256",
+        "./js/en/moons.js": "./js/en/moons.js?v=20261107-1256",
+        "./js/ru/comets.js": "./js/ru/comets.js?v=20261107-1256",
+        "./js/ru/data.js": "./js/ru/data.js?v=20261107-1256",
+        "./js/ru/glossary.js": "./js/ru/glossary.js?v=20261107-1256",
+        "./js/ru/moons.js": "./js/ru/moons.js?v=20261107-1256"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="scene" aria-label="Трёхмерная модель Солнечной системы"></div>
+  <div id="labels"></div>
+
+  <header class="topbar">
+    <h1 class="brand">Путешествие по Солнечной системе</h1>
+    <div class="actions">
+      <button id="btn-tour" class="btn btn-primary" type="button">Экскурсия</button>
+      <button id="btn-overview" class="btn" type="button" title="Вид сверху">🔭 <span class="hide-phone">Вид сверху</span></button>
+      <button id="btn-scale" class="btn" type="button" title="Перейти к настоящим расстояниям">📏 <span class="hide-phone">Настоящие расстояния</span></button>
+      <button id="btn-voice" class="btn btn-icon" type="button" aria-pressed="true" title="Рассказчик включён">🔊</button>
+      <a id="btn-lang" class="btn btn-icon" href="./" lang="he" hreflang="he" title="הגרסה בעברית">עב</a>
+      <a class="btn btn-icon" href="en/" lang="en" hreflang="en" title="English version">EN</a>
+      <button id="btn-settings" class="btn btn-icon" type="button" aria-expanded="false" aria-controls="settings" title="Настройки">⚙️</button>
+    </div>
+  </header>
+
+  <div id="settings" class="settings" role="dialog" aria-label="Настройки" hidden>
+    <h2>Настройки</h2>
+    <label class="setting">
+      <span>Высота голоса <output id="pitch-value"></output></span>
+      <input id="pitch" type="range" min="0.75" max="1.5" step="0.05">
+      <span class="setting-ends"><span>Низкий</span><span>Высокий</span></span>
+    </label>
+    <label class="setting">
+      <span>Скорость речи <output id="rate-value"></output></span>
+      <input id="rate" type="range" min="0.6" max="1.5" step="0.05">
+      <span class="setting-ends"><span>Медленно</span><span>Быстро</span></span>
+    </label>
+    <div class="settings-actions">
+      <button id="settings-test" class="btn btn-primary btn-small" type="button">🔊 Проверить</button>
+      <button id="settings-reset" class="btn btn-small" type="button">Сбросить</button>
+    </div>
+    <div class="mode-toggle" role="group" aria-label="Длина объяснений"><span>Объяснения:</span><button type="button" class="btn btn-small" data-mode="short">⚡ Короткие</button><button type="button" class="btn btn-small" data-mode="full">📚 Полные</button></div>
+    <button id="btn-guide" class="btn btn-small settings-guide" type="button" aria-pressed="true">👦 Скрыть гида Офека</button>
+    <p id="voice-status" class="voice-status"></p>
+    <p class="credit">Персонаж Офека: <a href="https://sketchfab.com/3d-models/kid-character-fully-rigged-984867aa0e8b4aad84063874dd5179cc" target="_blank" rel="noopener">Guilherme Navarro</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, с изменениями. Поверхность Солнца: <a href="https://sketchfab.com/3d-models/sun-9ef1c68fbb944147bcfcc891d3912645" target="_blank" rel="noopener">SebastianSosnowski</a>, CC BY 4.0, с изменениями. Карты планет и Луны: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a>, CC BY 4.0, с изменениями. Млечный Путь снаружи: снимок галактики M101, <a href="https://esahubble.org/images/heic0602a/" target="_blank" rel="noopener">ESA и NASA (телескоп «Хаббл»)</a>, CC BY 4.0, с изменениями.</p>
+  </div>
+
+  <section class="timebar" aria-label="Управление временем">
+    <button id="btn-play" class="btn btn-icon" type="button" title="Остановить время">⏸</button>
+    <label class="speed">
+      <span>Скорость времени</span>
+      <input id="speed" type="range" min="0" max="100" step="1" value="56">
+    </label>
+    <div class="clock">
+      <span id="speed-label"></span>
+      <span id="date-label"></span>
+    </div>
+    <button id="btn-today" class="btn btn-small" type="button">Сегодня</button>
+  </section>
+
+  <aside id="panel" class="panel" hidden aria-live="polite">
+    <button id="panel-close" class="close" type="button" aria-label="Закрыть">✕</button>
+    <div class="panel-head">
+      <span id="panel-dot" class="dot"></span>
+      <div>
+        <h2 id="panel-title"></h2>
+        <p id="panel-subtitle" class="subtitle"></p>
+      </div>
+    </div>
+    <div id="ask-continue" class="ask" hidden>
+      <p>🙋‍♂️ <strong>Офек:</strong> Хотите, чтобы я рассказывал дальше?</p>
+      <div class="ask-actions">
+        <button id="ask-yes" class="btn btn-primary" type="button">Да, продолжай!</button>
+        <button id="ask-no" class="btn" type="button">Не сейчас</button>
+      </div>
+    </div>
+    <button id="btn-listen" class="btn btn-primary listen" type="button">🔊 Слушать</button>
+    <p id="panel-live" class="live" hidden></p>
+    <p id="panel-text" class="narration"></p>
+    <button id="panel-more" class="btn btn-small more" type="button" hidden>📖 Расскажи ещё</button>
+    <div id="panel-fun" class="fun"></div>
+    <div id="panel-moons" class="moons" hidden></div>
+    <dl id="panel-facts" class="facts"></dl>
+  </aside>
+
+  <aside id="term-card" class="panel term-card" hidden aria-live="polite">
+    <button id="term-close" class="close" type="button" aria-label="Закрыть">✕</button>
+    <div id="term-view">
+      <div class="panel-head">
+        <span id="term-emoji" class="term-emoji" aria-hidden="true"></span>
+        <div>
+          <p id="term-kicker" class="subtitle">Офек объясняет</p>
+          <h2 id="term-title"></h2>
+        </div>
+      </div>
+      <p id="term-text" class="narration"></p>
+      <div class="term-actions">
+        <button id="term-back" class="btn btn-primary" type="button">Назад к рассказу</button>
+        <button id="term-listen" class="btn" type="button">🔊 Ещё раз</button>
+        <button id="term-all" class="btn" type="button">📖 Все слова</button>
+      </div>
+    </div>
+    <div id="term-list" hidden>
+      <div class="panel-head">
+        <span class="term-emoji" aria-hidden="true">📖</span>
+        <div>
+          <h2>Словарик</h2>
+          <p class="subtitle">Нажмите на слово, и Офек его объяснит</p>
+        </div>
+      </div>
+      <div id="term-grid" class="term-grid"></div>
+    </div>
+  </aside>
+
+  <div id="fly-distance" class="fly-distance" aria-hidden="true"></div>
+  <div id="tourbar" class="tourbar" hidden>
+    <button id="tour-prev" class="btn" type="button">← Назад</button>
+    <span id="tour-step"></span>
+    <button id="tour-next" class="btn" type="button">Дальше →</button>
+    <button id="tour-stop" class="btn btn-small" type="button">Завершить</button>
+  </div>
+
+  <nav id="chooser" class="chooser" aria-label="Выберите планету"></nav>
+
+  <div id="presenter" class="presenter" aria-hidden="true"></div>
+
+  <div id="intro" class="intro">
+    <div class="intro-card">
+      <h2>Путешествие по Солнечной системе</h2>
+      <p>Привет! Я Офек 👋 Давайте вместе познакомимся с Солнцем и восемью планетами, посмотрим, как они движутся, и послушаем истории о них.</p>
+      <div class="intro-actions">
+        <button id="start-tour" class="btn btn-primary btn-big" type="button">🚀 Начать экскурсию</button>
+        <button id="start-free" class="btn btn-big" type="button">Исследовать самому</button>
+      </div>
+      <div class="mode-toggle" role="group" aria-label="Длина объяснений"><span>Объяснения:</span><button type="button" class="btn btn-small" data-mode="short">⚡ Короткие</button><button type="button" class="btn btn-small" data-mode="full">📚 Полные</button></div>
+      <p id="voice-note" class="voice-note" hidden></p>
+      <p class="hint">Совет: тяните, чтобы поворачивать вид, и сводите пальцы или крутите колёсико, чтобы приближать.</p>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js?v=20261107-1256"></script>
+</body>
+</html>

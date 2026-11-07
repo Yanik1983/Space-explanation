@@ -259,6 +259,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 }
 .fun:empty { display: none; }
 .fun::before { content: 'הידעתם? '; font-weight: 700; color: var(--accent); }
+html[lang="en"] .fun::before { content: 'Did you know? '; }
+html[lang="ru"] .fun::before { content: 'А вы знали? '; }
 .facts { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
 .facts:empty { display: none; }
 .facts dt { color: var(--muted); }
@@ -445,6 +447,8 @@ body.term-open #panel { visibility: hidden; }
   /* בטלפון יש שישה כפתורים בשורה העליונה – מקטינים את כפתורי הסמלים כדי שכולם ייכנסו */
   .actions { gap: 4px; }
   .btn-icon { min-width: 36px; padding: 6px 8px; }
+  /* שני כפתורי השפה צרים יותר, כדי שגם ההגדרות ייכנסו */
+  .actions .btn-icon[hreflang] { min-width: 30px; padding: 6px 5px; font-size: 13px; }
 }
 .settings-guide { display: block; margin-top: 12px; }
 

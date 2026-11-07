@@ -6,6 +6,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { LANG, LOCALE, tt } from './i18n.js';
+// русское множественное число: 1 день, 2 дня, 5 дней
+const ruPlural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
 import { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY, GLOSSARY, GLOSSARY_FORMS, CONTINUE_QUESTION, MOONS, COMETS, COMETS_INFO } from './content.js';
 import { heliocentric, orbitPoints, semiMajor, moonDirection, poleVector, makeAsteroids, asteroidPosition, cometPosition, cometOrbitPoints } from './orbits.js';
 import { planetTexture, ringTexture, glowTexture, imageTexture, loadDetailed, loadPhotos, ringPhoto, hiResPath, loadTexture } from './textures.js';
@@ -899,7 +901,7 @@ function initGalaxyMotion() {
 
 
   // החלליות וויאג'ר 1 ו־2 – היחידות שכבר יצאו מהבועה (ב־2012 וב־2018). מקום ומרחק בערך נכונים לשנת 2026
-  for (const [name, ra, dec, au] of [[tt("וויאג'ר 1", 'Voyager 1'), 258.3, 12.1, 169], [tt("וויאג'ר 2", 'Voyager 2'), 302.8, -59.6, 142]]) {
+  for (const [name, ra, dec, au] of [[tt("וויאג'ר 1", 'Voyager 1', 'Вояджер-1'), 258.3, 12.1, 169], [tt("וויאג'ר 2", 'Voyager 2', 'Вояджер-2'), 302.8, -59.6, 142]]) {
     const el = document.createElement('div');
     el.className = 'label motion-label voyager-label';
     el.textContent = `🛰️ ${name}`;
@@ -949,7 +951,7 @@ function initGalaxyMotion() {
   speedBtn = document.createElement('button');
   speedBtn.type = 'button';
   speedBtn.className = 'btn btn-primary btn-small motion-speed-btn';
-  const setSpeedText = () => (speedBtn.textContent = realSpeedOn ? tt('🐢 להאט את התנועה', '🐢 Slow it down') : tt('🚀 מהירות אמיתית', '🚀 Real speed'));
+  const setSpeedText = () => (speedBtn.textContent = realSpeedOn ? tt('🐢 להאט את התנועה', '🐢 Slow it down', '🐢 Замедлить движение') : tt('🚀 מהירות אמיתית', '🚀 Real speed', '🚀 Настоящая скорость'));
   setSpeedText();
   speedBtn.addEventListener('click', () => {
     realSpeedOn = !realSpeedOn;
@@ -962,7 +964,7 @@ function initGalaxyMotion() {
   scene.add(motionArrow);
   galaxyInfo.label = document.createElement('div');
   galaxyInfo.label.className = 'label motion-label';
-  galaxyInfo.label.textContent = tt('לכאן אנחנו טסים', 'Where we are heading');
+  galaxyInfo.label.textContent = tt('לכאן אנחנו טסים', 'Where we are heading', 'Туда мы летим');
   galaxyInfo.label.style.display = 'none';
   $('labels').appendChild(galaxyInfo.label);
   galaxyInfo.group.position.copy(GALAXY_DIR).multiplyScalar(-44);
@@ -996,7 +998,7 @@ function updateGalaxyMotion(dt) {
     scene.add(centreArrow);
     centreLabel = document.createElement('div');
     centreLabel.className = 'label motion-label centre-label';
-    centreLabel.textContent = tt('למרכז הגלקסיה', 'To the galactic center');
+    centreLabel.textContent = tt('למרכז הגלקסיה', 'To the galactic center', 'К центру галактики');
     centreLabel.style.display = 'none';
     $('labels').appendChild(centreLabel);
   }
@@ -1020,7 +1022,7 @@ function updateGalaxyMotion(dt) {
   const boosted = timeRuns() && motionMix > 0 && MOTION_MIN_SPEED * motionMix > simSpeed();
   if (boosted !== speedBoostShown) {
     speedBoostShown = boosted;
-    if (boosted) $('speed-label').textContent = tt(`כל שנייה = ${MOTION_MIN_SPEED} ימים`, `${MOTION_MIN_SPEED} days per second`);
+    if (boosted) $('speed-label').textContent = tt(`כל שנייה = ${MOTION_MIN_SPEED} ימים`, `${MOTION_MIN_SPEED} days per second`, `${MOTION_MIN_SPEED} ${ruPlural(MOTION_MIN_SPEED, 'день', 'дня', 'дней')} в секунду`);
     else updateSpeedLabel();
   }
   if (!on) {
@@ -2067,7 +2069,7 @@ for (const body of bodies) {
     const beltChip = document.createElement('button');
     beltChip.type = 'button';
     beltChip.className = 'chip';
-    beltChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🪨</span><span>' + tt('אסטרואידים', 'Asteroids') + '</span>';
+    beltChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🪨</span><span>' + tt('אסטרואידים', 'Asteroids', 'Астероиды') + '</span>';
     beltChip.addEventListener('click', () => userSelect(belt));
     $('chooser').appendChild(beltChip);
     belt.chip = beltChip;
@@ -2077,28 +2079,28 @@ for (const body of bodies) {
   const cometChip = document.createElement('button');
   cometChip.type = 'button';
   cometChip.className = 'chip';
-  cometChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">☄️</span><span>' + tt('שביטים', 'Comets') + '</span>';
+  cometChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">☄️</span><span>' + tt('שביטים', 'Comets', 'Кометы') + '</span>';
   cometChip.addEventListener('click', () => userSelect(cometsInfo));
   $('chooser').appendChild(cometChip);
   cometsInfo.chip = cometChip;
   const galaxyChip = document.createElement('button');
   galaxyChip.type = 'button';
   galaxyChip.className = 'chip';
-  galaxyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌀</span><span>' + tt('טסים בחלל', 'Flying through space') + '</span>';
+  galaxyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌀</span><span>' + tt('טסים בחלל', 'Flying through space', 'Полёт в космосе') + '</span>';
   galaxyChip.addEventListener('click', () => userSelect(galaxyInfo));
   $('chooser').appendChild(galaxyChip);
   galaxyInfo.chip = galaxyChip;
   const bhChip = document.createElement('button');
   bhChip.type = 'button';
   bhChip.className = 'chip';
-  bhChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">⚫</span><span>' + tt('חור שחור', 'Black hole') + '</span>';
+  bhChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">⚫</span><span>' + tt('חור שחור', 'Black hole', 'Чёрная дыра') + '</span>';
   bhChip.addEventListener('click', () => userSelect(blackHoleInfo));
   $('chooser').appendChild(bhChip);
   blackHoleInfo.chip = bhChip;
   const milkyChip = document.createElement('button');
   milkyChip.type = 'button';
   milkyChip.className = 'chip';
-  milkyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌌</span><span>' + tt('שביל החלב', 'Milky Way') + '</span>';
+  milkyChip.innerHTML = '<span class="ball-emoji" aria-hidden="true">🌌</span><span>' + tt('שביל החלב', 'Milky Way', 'Млечный Путь') + '</span>';
   milkyChip.addEventListener('click', () => userSelect(milkyInfo));
   $('chooser').appendChild(milkyChip);
   milkyInfo.chip = milkyChip;
@@ -2107,7 +2109,7 @@ for (const body of bodies) {
   const chip = document.createElement('button');
   chip.type = 'button';
   chip.className = 'chip';
-  chip.innerHTML = '<span class="ball-emoji" aria-hidden="true">📖</span><span>' + tt('מילון', 'Glossary') + '</span>';
+  chip.innerHTML = '<span class="ball-emoji" aria-hidden="true">📖</span><span>' + tt('מילון', 'Glossary', 'Словарик') + '</span>';
   chip.addEventListener('click', () => openGlossary());
   $('chooser').appendChild(chip);
 }
@@ -2129,15 +2131,15 @@ function updateSpeedLabel() {
   let text;
   if (d < 1) {
     const h = Math.max(1, Math.round(d * 24));
-    text = tt(`כל שנייה = ${h} שעות`, `${h} ${h === 1 ? 'hour' : 'hours'} per second`);
+    text = tt(`כל שנייה = ${h} שעות`, `${h} ${h === 1 ? 'hour' : 'hours'} per second`, `${h} ${ruPlural(h, 'час', 'часа', 'часов')} в секунду`);
   } else if (d < 60) {
     const n = Math.round(d);
-    text = tt(`כל שנייה = ${n} ימים`, `${n} ${n === 1 ? 'day' : 'days'} per second`);
+    text = tt(`כל שנייה = ${n} ימים`, `${n} ${n === 1 ? 'day' : 'days'} per second`, `${n} ${ruPlural(n, 'день', 'дня', 'дней')} в секунду`);
   } else {
     const m = (d / 30.44).toFixed(d < 300 ? 1 : 0);
-    text = tt(`כל שנייה = ${m} חודשים`, `${m} months per second`);
+    text = tt(`כל שנייה = ${m} חודשים`, `${m} months per second`, `${m} ${ruPlural(m, 'месяц', 'месяца', 'месяцев')} в секунду`);
   }
-  $('speed-label').textContent = timeRuns() ? text : tt('הזמן עצר', 'Time is paused');
+  $('speed-label').textContent = timeRuns() ? text : tt('הזמן עצר', 'Time is paused', 'Время остановлено');
 }
 
 const dateFmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -2150,7 +2152,7 @@ $('speed').addEventListener('input', (e) => {
 $('btn-play').addEventListener('click', () => {
   playing = !playing;
   $('btn-play').textContent = playing ? '⏸' : '▶';
-  $('btn-play').title = playing ? tt('עצירת הזמן', 'Pause time') : tt('הפעלת הזמן', 'Resume time');
+  $('btn-play').title = playing ? tt('עצירת הזמן', 'Pause time', 'Остановить время') : tt('הפעלת הזמן', 'Resume time', 'Запустить время');
   updateSpeedLabel();
 });
 $('btn-today').addEventListener('click', () => {
@@ -2164,15 +2166,15 @@ updateSpeedLabel();
 // spot – המקום זוהר והכוכב מסתובב כך שהוא פונה אלינו; orbit – המסלול מואר; spin – הסיבוב מואץ לרגע (כדי לראות את הכיוון);
 // axis – קו הציר; moons – טבעת אור סביב הירחים; rings – הטבעות מבהיקות
 const PLANET_CUES = {
-  mercury: [[/מעוך|squished/, 'orbit']],
-  venus: [[/בכיוון הפוך|opposite direction/, 'spin']],
-  earth: [[/הציר|axis/, 'axis'], [/הירח|the Moon/, 'moons']],
-  mars: [[/אולימפוס|Olympus/, 'spot'], [/פובוס|Phobos/, 'moons']],
-  jupiter: [[/סופה ענקית|giant storm/, 'spot'], [/תשעים ירחים|ninety moons/, 'moons']],
-  saturn: [[/טבעות|rings/, 'rings']],
-  uranus: [[/על הצד|on its side/, 'axis']],
-  neptune: [[/טריטון|Triton/, 'moons']],
-  pluto: [[/המסלול|orbit/, 'orbit'], [/בצורת לב|heart/, 'spot']],
+  mercury: [[/מעוך|squished|сплюснутая/, 'orbit']],
+  venus: [[/בכיוון הפוך|opposite direction|в обратную сторону/, 'spin']],
+  earth: [[/הציר|axis|ось немного/, 'axis'], [/הירח|the Moon|кружится Луна/, 'moons']],
+  mars: [[/אולימפוס|Olympus|Олимп/, 'spot'], [/פובוס|Phobos|Фобос/, 'moons']],
+  jupiter: [[/סופה ענקית|giant storm|гигантская буря/, 'spot'], [/תשעים ירחים|ninety moons|девяноста спутников/, 'moons']],
+  saturn: [[/טבעות|rings|[Кк]ольц/, 'rings']],
+  uranus: [[/על הצד|on its side|на боку/, 'axis']],
+  neptune: [[/טריטון|Triton|Тритон/, 'moons']],
+  pluto: [[/המסלול|orbit|орбита/, 'orbit'], [/בצורת לב|heart|сердца/, 'spot']],
 };
 let cue = null; // { body, kind }
 function setPlanetCue(text) {
@@ -2625,7 +2627,7 @@ $('btn-guide').addEventListener('click', () => {
   guideOn = !guideOn;
   presenterEl.hidden = !guideOn;
   $('btn-guide').setAttribute('aria-pressed', String(guideOn));
-  $('btn-guide').textContent = guideOn ? tt('👦 הסתרת אופק המדריך', '👦 Hide Ofek the guide') : tt('👦 הצגת אופק המדריך', '👦 Show Ofek the guide');
+  $('btn-guide').textContent = guideOn ? tt('👦 הסתרת אופק המדריך', '👦 Hide Ofek the guide', '👦 Скрыть гида Офека') : tt('👦 הצגת אופק המדריך', '👦 Show Ofek the guide', '👦 Показать гида Офека');
 });
 let selected = null;
 
@@ -2759,7 +2761,7 @@ function stopSpeaking() {
 let listening = false;
 function setListening(on) {
   listening = on;
-  $('btn-listen').textContent = on ? tt('⏹ עצירה', '⏹ Stop') : tt('🔊 הקשיבו', '🔊 Listen');
+  $('btn-listen').textContent = on ? tt('⏹ עצירה', '⏹ Stop', '⏹ Стоп') : tt('🔊 הקשיבו', '🔊 Listen', '🔊 Слушать');
 }
 
 $('btn-listen').addEventListener('click', () => {
@@ -2769,7 +2771,7 @@ $('btn-listen').addEventListener('click', () => {
 });
 
 // ---------- מילון מושגים ----------
-const LETTER = LANG === 'en' ? /[A-Za-z]/ : /[\u05D0-\u05EA]/;
+const LETTER = { en: /[A-Za-z]/, ru: /[А-Яа-яЁё]/ }[LANG] || /[\u05D0-\u05EA]/;
 const isLetter = (ch) => !!ch && LETTER.test(ch);
 
 // מחזיר את המשפט כרשימת קטעי טקסט וכפתורי מושגים. כל מושג מסומן רק פעם אחת (used)
@@ -2782,7 +2784,7 @@ function linkTerms(text, used) {
     if (!isLetter(text[i - 1])) {
       // הצורה הארוכה ביותר שמתאימה כאן (כך "כוכב לכת" לא נקרא בטעות כ"כוכב")
       match = GLOSSARY_FORMS.find(({ form, term }) =>
-        (LANG === 'en' ? text.slice(i, i + form.length).toLowerCase() === form : text.startsWith(form, i)) && !isLetter(text[i + form.length]) &&
+        (LANG !== 'he' ? text.slice(i, i + form.length).toLowerCase() === form : text.startsWith(form, i)) && !isLetter(text[i + form.length]) &&
         !(term.notBefore || []).some((w) => text.startsWith(' ' + w, i + form.length)));
     }
     if (!match) {
@@ -2802,7 +2804,7 @@ function linkTerms(text, used) {
     btn.type = 'button';
     btn.className = 'term';
     btn.textContent = shown;
-    btn.title = tt('מה זה ', 'What is ') + match.term.title + '?';
+    btn.title = tt('מה זה ', 'What is ', 'Что такое ') + match.term.title + '?';
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       openTerm(match.term);
@@ -2840,7 +2842,7 @@ function openTerm(term, from = 'panel') {
   $('term-list').hidden = true;
   $('term-emoji').textContent = term.emoji;
   $('term-title').textContent = term.title;
-  $('term-kicker').textContent = term.kicker || tt('אופק מסביר מושג', 'Ofek explains');
+  $('term-kicker').textContent = term.kicker || tt('אופק מסביר מושג', 'Ofek explains', 'Офек объясняет');
   $('term-text').replaceChildren(
     ...splitSentences(term.text).flatMap((s) => {
       const span = document.createElement('span');
@@ -2848,7 +2850,7 @@ function openTerm(term, from = 'panel') {
       return [span, ' '];
     }),
   );
-  $('term-back').textContent = from === 'list' ? tt('חזרה למילון', 'Back to the glossary') : $('panel').hidden ? tt('סגירה', 'Close') : tt('חזרה להסבר', 'Back to the story');
+  $('term-back').textContent = from === 'list' ? tt('חזרה למילון', 'Back to the glossary', 'Назад к словарику') : $('panel').hidden ? tt('סגירה', 'Close', 'Закрыть') : tt('חזרה להסבר', 'Back to the story', 'Назад к рассказу');
   $('term-card').scrollTop = 0;
   presenter.play('open', 2.4);
   if (voiceOn) speakTerm();
@@ -2858,13 +2860,13 @@ function openTerm(term, from = 'panel') {
 function speakTerm() {
   const spans = [...$('term-text').querySelectorAll('span')];
   termSpeaking = true;
-  $('term-listen').textContent = tt('⏹ עצירה', '⏹ Stop');
+  $('term-listen').textContent = tt('⏹ עצירה', '⏹ Stop', '⏹ Стоп');
   narrator.speak(currentTerm.text, {
     onSentence: (i) => spans.forEach((s, j) => s.classList.toggle('speaking', i === j)),
     onEnd: () => {
       spans.forEach((s) => s.classList.remove('speaking'));
       termSpeaking = false;
-      $('term-listen').textContent = tt('🔊 שוב', '🔊 Again');
+      $('term-listen').textContent = tt('🔊 שוב', '🔊 Again', '🔊 Ещё раз');
     },
   });
 }
@@ -2943,7 +2945,7 @@ $('term-listen').addEventListener('click', () => {
   if (termSpeaking) {
     narrator.stop();
     termSpeaking = false;
-    $('term-listen').textContent = tt('🔊 שוב', '🔊 Again');
+    $('term-listen').textContent = tt('🔊 שוב', '🔊 Again', '🔊 Ещё раз');
     $('term-text').querySelectorAll('span').forEach((s) => s.classList.remove('speaking'));
   } else speakTerm();
 });
@@ -2992,16 +2994,16 @@ function updateLiveDistance() {
   el.hidden = false;
   const million = selected.au.length() * 149.598;
   const text = million >= 1000
-    ? tt(`${distFmt.format(million / 1000)} מיליארד ק"מ`, `${distFmt.format(million / 1000)} billion km`)
-    : tt(`${distFmt.format(million)} מיליון ק"מ`, `${distFmt.format(million)} million km`);
-  if (el.dataset.text !== text) el.textContent = el.dataset.text = tt(`המרחק מהשמש עכשיו: ${text}`, `Distance from the Sun now: ${text}`);
+    ? tt(`${distFmt.format(million / 1000)} מיליארד ק"מ`, `${distFmt.format(million / 1000)} billion km`, `${distFmt.format(million / 1000)} млрд км`)
+    : tt(`${distFmt.format(million)} מיליון ק"מ`, `${distFmt.format(million)} million km`, `${distFmt.format(million)} млн км`);
+  if (el.dataset.text !== text) el.textContent = el.dataset.text = tt(`המרחק מהשמש עכשיו: ${text}`, `Distance from the Sun now: ${text}`, `Расстояние до Солнца сейчас: ${text}`);
 }
 
 $('btn-scale').addEventListener('click', () => {
   endShow();
   scaleTarget = 1 - scaleTarget;
-  $('btn-scale').querySelector('span').textContent = scaleTarget ? tt('מרחקים מוקטנים', 'Compact distances') : tt('מרחקים אמיתיים', 'Real distances');
-  $('btn-scale').title = scaleTarget ? tt('מעבר למרחקים מוקטנים', 'Switch to compact distances') : tt('מעבר למרחקים אמיתיים', 'Switch to real distances');
+  $('btn-scale').querySelector('span').textContent = scaleTarget ? tt('מרחקים מוקטנים', 'Compact distances', 'Уменьшенные расстояния') : tt('מרחקים אמיתיים', 'Real distances', 'Настоящие расстояния');
+  $('btn-scale').title = scaleTarget ? tt('מעבר למרחקים מוקטנים', 'Switch to compact distances', 'Перейти к уменьшенным расстояниям') : tt('מעבר למרחקים אמיתיים', 'Switch to real distances', 'Перейти к настоящим расстояниям');
   if (tour) endTour();
   markActive(null);
   flyTo(null, 3);
@@ -3137,7 +3139,7 @@ function showBody(body) {
   showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, short: d.short, facts: d.facts, funFact: d.funFact });
   if (body.moons.length) {
     const h = document.createElement('h3');
-    h.textContent = body.moons.length === 1 ? tt('🌙 לחצו כדי לשמוע על הירח:', '🌙 Tap to hear about the moon:') : tt(`🌙 הירחים החשובים של ${d.name}:`, `🌙 The important moons of ${d.name}:`);
+    h.textContent = body.moons.length === 1 ? tt('🌙 לחצו כדי לשמוע על הירח:', '🌙 Tap to hear about the moon:', '🌙 Нажмите, чтобы послушать о Луне:') : tt(`🌙 הירחים החשובים של ${d.name}:`, `🌙 The important moons of ${d.name}:`, `🌙 Главные спутники – ${d.name}:`);
     const list = document.createElement('div');
     list.className = 'moons-list';
     for (const m of body.moons) {
@@ -3162,7 +3164,7 @@ function showComets() {
   flyTo(nearest);
   showPanel({ title: d.name, subtitle: d.subtitle, color: d.color, text: d.narration, short: d.short, facts: d.facts, funFact: d.funFact });
   const h = document.createElement('h3');
-  h.textContent = tt('☄️ שביטים מפורסמים:', '☄️ Famous comets:');
+  h.textContent = tt('☄️ שביטים מפורסמים:', '☄️ Famous comets:', '☄️ Знаменитые кометы:');
   const list = document.createElement('div');
   list.className = 'moons-list';
   for (const c of comets) {
@@ -3183,7 +3185,7 @@ function openMoon(m) {
     if (tour) endTour();
     showBody(m.planet);
   }
-  openTerm({ ...m.data, kicker: tt(`ירח של ${m.planet.data.name}`, `Moon of ${m.planet.data.name}`) }, 'panel');
+  openTerm({ ...m.data, kicker: tt(`ירח של ${m.planet.data.name}`, `Moon of ${m.planet.data.name}`, `Спутник: ${m.planet.data.name}`) }, 'panel');
 }
 
 function userSelect(body) {
@@ -3199,7 +3201,7 @@ $('btn-overview').addEventListener('click', () => {
   flyTo(null);
 });
 // מבחוץ, לחיצה על "אנחנו כאן" טסה חזרה פנימה, דרך הכוכבים של הגלקסיה, עד מערכת השמש
-milky.hereLabel.title = tt('לחצו כדי לטוס אל מערכת השמש', 'Tap to fly to the solar system');
+milky.hereLabel.title = tt('לחצו כדי לטוס אל מערכת השמש', 'Tap to fly to the solar system', 'Нажмите, чтобы полететь к Солнечной системе');
 milky.hereLabel.addEventListener('click', () => $('btn-overview').click());
 
 // זום אאוט מעבר לגבול: האפליקציה טסה מהר אל שביל החלב מבחוץ (בלי תחנה ובלי קריין), והגלקסיה מסתובבת.
@@ -3229,7 +3231,7 @@ renderer.domElement.addEventListener('touchend', () => (pinchD = 0), { passive: 
 $('btn-voice').addEventListener('click', () => {
   voiceOn = !voiceOn;
   $('btn-voice').textContent = voiceOn ? '🔊' : '🔇';
-  $('btn-voice').title = voiceOn ? tt('קריין פועל', 'Narrator on') : tt('קריין כבוי', 'Narrator off');
+  $('btn-voice').title = voiceOn ? tt('קריין פועל', 'Narrator on', 'Рассказчик включён') : tt('קריין כבוי', 'Narrator off', 'Рассказчик выключен');
   $('btn-voice').setAttribute('aria-pressed', String(voiceOn));
   if (!voiceOn) {
     stopSpeaking();
@@ -3247,10 +3249,10 @@ function showSettings() {
   $('rate').value = speed;
   $('pitch-value').textContent = percent(pitch);
   $('rate-value').textContent = percent(speed);
-  const voice = narrator.hasRecordings ? tt('הקול של אופק (קבצים מוקלטים)', "Ofek's voice (recorded files)") : tt('קול הדפדפן', 'Browser voice');
-  const last = { files: tt('הקול של אופק', "Ofek's voice"), browser: tt('קול הדפדפן', 'Browser voice'), none: tt('בלי קול', 'No voice') }[narrator.status];
+  const voice = narrator.hasRecordings ? tt('הקול של אופק (קבצים מוקלטים)', "Ofek's voice (recorded files)", 'Голос Офека (записанные файлы)') : tt('קול הדפדפן', 'Browser voice', 'Голос браузера');
+  const last = { files: tt('הקול של אופק', "Ofek's voice", 'Голос Офека'), browser: tt('קול הדפדפן', 'Browser voice', 'Голос браузера'), none: tt('בלי קול', 'No voice', 'Без голоса') }[narrator.status];
   $('voice-status').textContent =
-    tt(`קול זמין: ${voice}`, `Available voice: ${voice}`) + (last ? tt(` · הושמע לאחרונה: ${last}`, ` · Last played: ${last}`) : '') + (narrator.lastError ? tt(` · שגיאה: ${narrator.lastError}`, ` · Error: ${narrator.lastError}`) : '');
+    tt(`קול זמין: ${voice}`, `Available voice: ${voice}`, `Доступный голос: ${voice}`) + (last ? tt(` · הושמע לאחרונה: ${last}`, ` · Last played: ${last}`, ` · Последний раз звучал: ${last}`) : '') + (narrator.lastError ? tt(` · שגיאה: ${narrator.lastError}`, ` · Error: ${narrator.lastError}`, ` · Ошибка: ${narrator.lastError}`) : '');
 }
 
 function toggleSettings(open = settingsEl.hidden) {
@@ -3299,18 +3301,18 @@ $('settings-test').addEventListener('click', () => {
 // כמות הכוכבים שנבחרה כן נשמרת בדפדפן הזה
 const devBox = document.createElement('div');
 devBox.className = 'dev-settings';
-devBox.innerHTML = `<h3>${tt('🛠️ למפתחים', '🛠️ Developers')}</h3>
-  <label class="setting"><span>${tt('כוכבים בגלקסיה מבחוץ', 'Stars in the outside galaxy')} <output id="dev-stars-value"></output></span>
+devBox.innerHTML = `<h3>${tt('🛠️ למפתחים', '🛠️ Developers', '🛠️ Для разработчиков')}</h3>
+  <label class="setting"><span>${tt('כוכבים בגלקסיה מבחוץ', 'Stars in the outside galaxy', 'Звёзды в галактике снаружи')} <output id="dev-stars-value"></output></span>
     <select id="dev-stars"></select></label>
-  <p class="dev-note">${tt('יותר כוכבים = גלקסיה עדינה יותר, אבל כבדה יותר למכשיר.', 'More stars = a finer galaxy, but heavier for the device.')}</p>
-  <button id="dev-off" class="btn btn-small" type="button">${tt('הסתרת אפשרויות המפתחים', 'Hide developer options')}</button>`;
+  <p class="dev-note">${tt('יותר כוכבים = גלקסיה עדינה יותר, אבל כבדה יותר למכשיר.', 'More stars = a finer galaxy, but heavier for the device.', 'Больше звёзд = галактика тоньше, но тяжелее для устройства.')}</p>
+  <button id="dev-off" class="btn btn-small" type="button">${tt('הסתרת אפשרויות המפתחים', 'Hide developer options', 'Скрыть настройки для разработчиков')}</button>`;
 settingsEl.appendChild(devBox);
 const starsSel = $('dev-stars');
 const fmtK = (n) => (n >= 1e6 ? `${n / 1e6}M` : `${Math.round(n / 1000)}K`);
 function fillStars() {
   const cur = milky.starCount(), def = milky.defaultStars();
   const opts = [...new Set([50000, 100000, 200000, 300000, 400000, 600000, 800000, 1000000, 1500000, cur])].sort((a, b) => a - b);
-  starsSel.replaceChildren(...opts.map((n) => new Option(fmtK(n) + (n === def ? tt(' (ברירת מחדל)', ' (default)') : ''), String(n), false, n === cur)));
+  starsSel.replaceChildren(...opts.map((n) => new Option(fmtK(n) + (n === def ? tt(' (ברירת מחדל)', ' (default)', ' (по умолчанию)') : ''), String(n), false, n === cur)));
   $('dev-stars-value').textContent = fmtK(cur);
 }
 starsSel.addEventListener('change', () => {
@@ -3369,9 +3371,9 @@ function updateFlyDistance() {
   if (!flyDist || flyDist.hide) return;
   const m = flyDist.million * (tween ? tween.e : 1);
   const text = m >= 1000
-    ? tt(`${distFmt.format(m / 1000)} מיליארד ק"מ`, `${distFmt.format(m / 1000)} billion km`)
-    : tt(`${flyFmt.format(m)} מיליון ק"מ`, `${flyFmt.format(m)} million km`);
-  $('fly-distance').textContent = tt(`🚀 טסנו ${text}`, `🚀 We flew ${text}`);
+    ? tt(`${distFmt.format(m / 1000)} מיליארד ק"מ`, `${distFmt.format(m / 1000)} billion km`, `${distFmt.format(m / 1000)} млрд км`)
+    : tt(`${flyFmt.format(m)} מיליון ק"מ`, `${flyFmt.format(m)} million km`, `${flyFmt.format(m)} млн км`);
+  $('fly-distance').textContent = tt(`🚀 טסנו ${text}`, `🚀 We flew ${text}`, `🚀 Мы пролетели ${text}`);
   if (!tween) flyDist.hide = setTimeout(() => $('fly-distance').classList.remove('show'), 1800);
 }
 
@@ -3381,9 +3383,9 @@ function goToStep(i) {
   endShow();
   tour.index = Math.max(0, Math.min(tourSteps.length - 1, i));
   const step = tourSteps[tour.index];
-  $('tour-step').textContent = tt(`${tour.index + 1} מתוך ${tourSteps.length}`, `${tour.index + 1} of ${tourSteps.length}`);
+  $('tour-step').textContent = tt(`${tour.index + 1} מתוך ${tourSteps.length}`, `${tour.index + 1} of ${tourSteps.length}`, `${tour.index + 1} из ${tourSteps.length}`);
   $('tour-prev').disabled = tour.index === 0;
-  $('tour-next').textContent = tour.index === tourSteps.length - 1 ? tt('סיום', 'Finish') : tt('הבא ←', 'Next →');
+  $('tour-next').textContent = tour.index === tourSteps.length - 1 ? tt('סיום', 'Finish', 'Конец') : tt('הבא ←', 'Next →', 'Дальше →');
 
   // מונה המרחק: כמה טסנו מהתחנה הקודמת (רק בין גופים שיש להם מקום במערכת השמש)
   // (החגורה היא אזור ולא מקום אחד, ולכן מדלגים עליה: מצדק מודדים ממאדים)
@@ -3759,8 +3761,10 @@ function updateVoiceNote() {
     ? tt('לא מצאנו במכשיר הזה קול שמדבר עברית, אז ההסברים יופיעו כטקסט בלבד. ' +
         'אפשר להוסיף קול עברי בהגדרות המכשיר (שפה ודיבור), או לנסות בדפדפן כרום.',
       "We couldn't find an English voice on this device, so the explanations will appear as text only. " +
-        'You can add an English voice in the device settings (language and speech), or try the Chrome browser.')
-    : tt('הדפדפן הזה לא תומך בהקראה, אז ההסברים יופיעו כטקסט בלבד.', 'This browser does not support reading aloud, so the explanations will appear as text only.');
+        'You can add an English voice in the device settings (language and speech), or try the Chrome browser.',
+      'На этом устройстве не нашлось русского голоса, поэтому объяснения будут только текстом. ' +
+        'Можно добавить русский голос в настройках устройства (язык и речь) или попробовать браузер Chrome.')
+    : tt('הדפדפן הזה לא תומך בהקראה, אז ההסברים יופיעו כטקסט בלבד.', 'This browser does not support reading aloud, so the explanations will appear as text only.', 'Этот браузер не умеет читать вслух, поэтому объяснения будут только текстом.');
 }
 narrator.onVoiceChange = updateVoiceNote;
 // הקולות נטענים לפעמים באיחור, לכן נותנים להם רגע לפני שמציגים אזהרה

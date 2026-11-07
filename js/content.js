@@ -1,7 +1,7 @@
 // טוען את הטקסטים של השפה הנוכחית: עברית מ־js/*.js, אנגלית מ־js/en/*.js (אותו מבנה בדיוק).
 import { LANG } from './i18n.js';
 
-const dir = LANG === 'en' ? './en/' : './';
+const dir = LANG === 'he' ? './' : `./${LANG}/`;
 const [data, glossary, moons, comets] = await Promise.all(
   ['data', 'glossary', 'moons', 'comets'].map((f) => import(`${dir}${f}.js`)),
 );

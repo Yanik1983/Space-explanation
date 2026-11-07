@@ -9,7 +9,7 @@
 
 import { LANG, LOCALE } from './i18n.js';
 
-const AUDIO_DIR = LANG === 'en' ? 'audio/en/' : 'audio/';
+const AUDIO_DIR = LANG === 'he' ? 'audio/' : `audio/${LANG}/`;
 const SETTINGS_KEY = 'narrator-settings';
 export const DEFAULT_SETTINGS = { pitch: 1, speed: 1 };
 const WAKE_LEAD = 0.35; // שניות שקט לפני ההקראה הראשונה, כשהשמע עוד "מתעורר"
@@ -49,7 +49,7 @@ export class Narrator {
 
   pickVoice() {
     const voices = speechSynthesis.getVoices();
-    const hebrew = voices.filter((v) => (LANG === 'en' ? /^en([-_]|$)/i : /^(he|iw)([-_]|$)/i).test(v.lang));
+    const hebrew = voices.filter((v) => ({ en: /^en([-_]|$)/i, ru: /^ru([-_]|$)/i }[LANG] || /^(he|iw)([-_]|$)/i).test(v.lang));
     // עדיפות לקולות איכותיים (Google / Natural / Online) אם קיימים
     hebrew.sort((a, b) => score(b) - score(a));
     this.voice = hebrew[0] || null;

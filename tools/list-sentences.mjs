@@ -2,8 +2,9 @@
 // משמש את tools/generate_audio.py.
 import { splitSentences } from '../js/speech.js';
 
-// --lang en: הטקסטים באנגלית מ־js/en/ (אותו מבנה כמו בעברית)
-const dir = process.argv.includes('--lang') && process.argv[process.argv.indexOf('--lang') + 1] === 'en' ? '../js/en/' : '../js/';
+// --lang en / --lang ru: הטקסטים מ־js/en/ או js/ru/ (אותו מבנה כמו בעברית)
+const lang = process.argv.includes('--lang') ? process.argv[process.argv.indexOf('--lang') + 1] : 'he';
+const dir = lang === 'he' ? '../js/' : `../js/${lang}/`;
 const { SUN, PLANETS, TOUR_INTRO, TOUR_OUTRO, SCALE_REAL, SCALE_COMPRESSED, ASTEROID_BELT, GALAXY_MOTION, BLACK_HOLE, MILKY_WAY } = await import(dir + 'data.js');
 const { GLOSSARY, CONTINUE_QUESTION } = await import(dir + 'glossary.js');
 const { MOONS } = await import(dir + 'moons.js');

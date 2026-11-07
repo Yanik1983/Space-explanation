@@ -1,4 +1,4 @@
-// בודק שקובצי התוכן באנגלית (js/en/) תואמים במבנה לקבצים העבריים: אותם מפתחות, מספרים ומזהים,
+// בודק שקובצי התוכן באנגלית (js/en/) או ברוסית (‎--lang ru‎, js/ru/) תואמים במבנה לקבצים העבריים: אותם מפתחות, מספרים ומזהים,
 // בלי עברית שנשארה, ובלי נקודות עשרוניות בטקסט שמוקרא (כי המשפט נחתך בנקודה).
 import { splitSentences } from '../js/speech.js';
 
@@ -45,10 +45,12 @@ function walk(he, en, path) {
   if (he !== en) errors.push(`${path}: value differs (${he} vs ${en})`);
 }
 
-const only = process.argv.slice(2);
+const args = process.argv.slice(2);
+const lang = args.includes('--lang') ? args[args.indexOf('--lang') + 1] : 'en';
+const only = args.filter((a, i) => a !== '--lang' && args[i - 1] !== '--lang');
 for (const f of FILES.filter((x) => !only.length || only.includes(x))) {
   let enMod;
-  try { enMod = await import(`../js/en/${f}.js`); } catch (e) { errors.push(`${f}: cannot load js/en/${f}.js (${e.message})`); continue; }
+  try { enMod = await import(`../js/${lang}/${f}.js`); } catch (e) { errors.push(`${f}: cannot load js/${lang}/${f}.js (${e.message})`); continue; }
   const heMod = await import(`../js/${f}.js`);
   for (const name of Object.keys(heMod).filter((n) => n !== 'GLOSSARY_FORMS')) {
     if (!(name in enMod)) { errors.push(`${f}.${name}: missing export`); continue; }
