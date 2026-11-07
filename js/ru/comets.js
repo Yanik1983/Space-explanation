@@ -1,7 +1,7 @@
-// Кометы: общее объяснение для детей и три настоящие кометы с их орбитами.
+// Comets: a general kid-friendly explanation plus three real comets with their orbits.
 //
-// el - элементы орбиты (эклиптика J2000): a (астрономические единицы), e, i, node (Ω), argPeri (ω) в градусах,
-//      и perihelion: дата, когда комета была ближе всего к Солнцу. Источник: JPL Small-Body Database (округлено).
+// el - orbit elements (ecliptic J2000): a (astronomical units), e, i, node (Ω), argPeri (ω) in degrees,
+//      and perihelion: the date the comet was closest to the Sun. Source: JPL Small-Body Database (rounded).
 
 export const COMETS_INFO = {
   id: 'comets',

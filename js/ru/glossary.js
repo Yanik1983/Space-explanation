@@ -1,9 +1,9 @@
-// Словарик для детей. Каждое понятие в объяснениях можно нажать, и Офек объяснит его.
+// Glossary for kids. Every term in the explanations becomes tappable, and Ofek explains it.
 //
-// forms - как понятие встречается в рассказе (строчными буквами, во всех нужных падежах). Поиск без учёта
-//         регистра и только по целым словам. Каждое понятие становится ссылкой только один раз в объяснении,
-//         там, где оно встречается впервые.
-// text  - объяснение, которое Офек читает вслух.
+// forms - the ways the term appears in the narration (lowercase, in every grammatical case used). Matching is
+//         case-insensitive and whole-word. Each term is linked only once per explanation,
+//         the first time it appears.
+// text  - the explanation Ofek reads aloud.
 
 export const GLOSSARY = [
   {
@@ -21,7 +21,7 @@ export const GLOSSARY = [
     title: 'Звезда',
     emoji: '⭐',
     forms: ['звезда', 'звезды', 'звезду', 'звезде', 'звездой', 'звёзды', 'звёзд', 'звезд', 'звёздам', 'звёздами', 'звёздах'],
-    notBefore: [], // в русском не нужно
+    notBefore: [], // not needed in Russian
     text:
       'Звезда – это огромный шар раскалённого газа, который сам излучает свет и тепло. Солнце – это звезда! ' +
       'Все крошечные точки, которые мы видим на ночном небе, – это звёзды, такие же, как Солнце. ' +
@@ -332,9 +332,9 @@ export const GLOSSARY = [
   },
 ];
 
-// Вопрос, который задаёт Офек, когда мы возвращаемся от понятия к основному объяснению
+// The question Ofek asks when we go back from a term to the main explanation
 export const CONTINUE_QUESTION = 'Хотите, чтобы я рассказывал дальше?';
 
-// Порядок поиска: сначала длинные формы, чтобы «карликовая планета» нашлась раньше, чем «планета»
+// Search order: longer forms first, so "карликовая планета" (dwarf planet) is matched before "планета"
 export const GLOSSARY_FORMS = GLOSSARY.flatMap((g) => g.forms.map((form) => ({ form, term: g })))
   .sort((a, b) => b.form.length - a.form.length);

@@ -1,9 +1,9 @@
-// Главные спутники каждой планеты: объяснение для детей и данные для показа.
+// The important moons of each planet: a kid-friendly explanation plus data for the display.
 //
-// period - время оборота вокруг планеты, в сутках (минус = вращается в обратную сторону, как Тритон)
-// dist   - расстояние на экране, в радиусах планеты (сильно уменьшено, чтобы увидеть их все)
-// size   - размер на экране
-// render - false, если спутник уже показан по-другому (наша Луна)
+// period - time to orbit the planet, in days (negative = orbits the opposite way, like Triton)
+// dist   - distance in the display, in planet radii (shrunk a lot so we can see them all)
+// size   - size in the display
+// render - false if the moon is already shown another way (our Moon)
 
 export const MOONS = {
   earth: [

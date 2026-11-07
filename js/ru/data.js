@@ -1,9 +1,9 @@
-// Данные о Солнце и планетах: числа для симуляции + русские тексты для рассказа.
+// Data for the Sun and the planets: numbers for the simulation + Russian texts for narration.
 //
-// rotation - время одного оборота вокруг своей оси, в земных сутках (минус = вращается в обратную сторону)
-// pole     - направление северного полюса [прямое восхождение, склонение] в градусах (МАС), задаёт наклон оси
-// size     - размер *на экране* (сильно увеличен, об этом рассказывается в экскурсии)
-// Сами орбиты и положения рассчитываются в orbits.js
+// rotation - time to spin once around its axis, in Earth days (negative = spins backwards)
+// pole     - direction of the north pole [right ascension, declination] in degrees (IAU), which gives the axis tilt
+// size     - size *on screen* (greatly enlarged, explained in the tour)
+// The orbits and positions themselves are calculated in orbits.js
 
 export const SUN = {
   id: 'sun',
@@ -268,8 +268,8 @@ export const PLANETS = [
   },
 ];
 
-// Начало экскурсии, в трёх коротких остановках. Каждое предложение запускает эффект на экране (см. INTRO_CUES в main.js).
-// Важно: предложения совпадают с записями в audio/ru/, поэтому изменённое предложение нужно записать заново.
+// The opening of the tour, in three short stops. Each sentence triggers an effect on screen (see INTRO_CUES in main.js).
+// Important: the sentences match the recordings in audio/ru/, so if you change a sentence it must be re-recorded.
 export const TOUR_INTRO = [
   {
     id: 'welcome',
@@ -349,7 +349,7 @@ export const ASTEROID_BELT = {
     'Самое большое тело в поясе – Церера, это карликовая планета, как Плутон.',
 };
 
-// Солнечная система в движении: Солнце и все планеты вместе мчатся вокруг центра галактики
+// The solar system on the move: the Sun and all the planets zoom together around the center of the galaxy
 export const GALAXY_MOTION = {
   id: 'galaxy-motion',
   name: 'Солнечная система мчится в космосе',
@@ -375,7 +375,7 @@ export const GALAXY_MOTION = {
     'На этой картинке мы сильно замедлили движение Солнца, иначе следы были бы слишком длинными, и мы бы их не увидели.',
 };
 
-// Ближайшая известная нам чёрная дыра (Gaia BH1), нарисованная как Гаргантюа из фильма «Интерстеллар» (остановка после «Солнечная система мчится в космосе»)
+// The closest black hole we know of (Gaia BH1), drawn like Gargantua from the movie "Interstellar" (a stop after "zooming through space")
 export const BLACK_HOLE = {
   id: 'black-hole',
   name: 'Чёрная дыра',
@@ -402,7 +402,7 @@ export const BLACK_HOLE = {
     'И не волнуйтесь: она очень далеко и не может нам навредить.',
 };
 
-// Млечный Путь снаружи: камера вылетает из галактики (остановка после «Солнечная система мчится в космосе»)
+// The Milky Way from outside: the camera flies out of the galaxy (a stop after "zooming through space")
 export const MILKY_WAY = {
   id: 'milky-way',
   name: 'Млечный Путь',
