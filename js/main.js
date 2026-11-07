@@ -3301,12 +3301,14 @@ $('settings-test').addEventListener('click', () => {
 // כמות הכוכבים שנבחרה כן נשמרת בדפדפן הזה
 const devBox = document.createElement('div');
 devBox.className = 'dev-settings';
-devBox.innerHTML = `<h3>${tt('🛠️ למפתחים', '🛠️ Developers', '🛠️ Для разработчиков')}</h3>
+devBox.innerHTML = `<h3>${tt('🛠️ תפריט ניהול', '🛠️ Admin menu', '🛠️ Меню администратора')}</h3>
   <label class="setting"><span>${tt('כוכבים בגלקסיה מבחוץ', 'Stars in the outside galaxy', 'Звёзды в галактике снаружи')} <output id="dev-stars-value"></output></span>
     <select id="dev-stars"></select></label>
   <p class="dev-note">${tt('יותר כוכבים = גלקסיה עדינה יותר, אבל כבדה יותר למכשיר.', 'More stars = a finer galaxy, but heavier for the device.', 'Больше звёзд = галактика тоньше, но тяжелее для устройства.')}</p>
-  <button id="dev-off" class="btn btn-small" type="button">${tt('הסתרת אפשרויות המפתחים', 'Hide developer options', 'Скрыть настройки для разработчиков')}</button>`;
+  <button id="dev-off" class="btn btn-small" type="button">${tt('הסתרת תפריט הניהול', 'Hide the admin menu', 'Скрыть меню администратора')}</button>`;
 settingsEl.appendChild(devBox);
+// גובה הקול ומהירות הדיבור (וכפתורי "נסו" ו"איפוס") נמצאים רק בתפריט הניהול, כדי שההגדרות הרגילות יישארו פשוטות
+devBox.querySelector('h3').after($('pitch').closest('.setting'), $('rate').closest('.setting'), settingsEl.querySelector('.settings-actions'));
 const starsSel = $('dev-stars');
 const fmtK = (n) => (n >= 1e6 ? `${n / 1e6}M` : `${Math.round(n / 1000)}K`);
 function fillStars() {
