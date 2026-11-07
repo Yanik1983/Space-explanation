@@ -547,3 +547,7 @@ body.leaving { opacity: 0; transition: opacity 0.35s ease-in; }
 .settings .mode-toggle { justify-content: flex-start; margin: 12px 0 4px; }
 .panel .more { margin: 2px 0 10px; }
 .panel .more[hidden] { display: none; }
+
+/* בחירת שפה במסך הפתיחה */
+.lang-pick { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; font-size: 14px; }
+.lang-pick .btn { text-decoration: none; }
