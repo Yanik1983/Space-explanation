@@ -259,7 +259,8 @@ class VoxCPMEngine:
             torch.manual_seed(VOXCPM_SEED if seed is None else seed)
             chunk = spoken(chunk)
             if LANG != "he":
-                chunk = chunk.replace("Ofek", "אופק")  # באנגלית השם נשמע לא נכון; בכתיבה עברית הוא מבוטא כמו שאופק אומר אותו
+                # באנגלית וברוסית השם נשמע לא נכון; בכתיבה עברית הוא מבוטא כמו שאופק אומר אותו (ברוסית נבחרה הדוגמה ru-2)
+                chunk = chunk.replace("Ofek", "אופק").replace("Офек", "אופק")
                 # קול של אופק בשפה אחרת: רק הדגימה כהתייחסות לגוון, בלי להמשיך את הטקסט העברי שלה
                 wav = self.model.generate(text=chunk, reference_wav_path=str(VOXCPM_REF),
                                           cfg_value=2.0, inference_timesteps=10)
